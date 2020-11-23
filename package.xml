@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<package>
+  <name>followbot</name>
+  <version>1.1.3</version>
+  <description>Followbot package for the warehouse</description>
+  <maintainer email="zhanteng.xie@temple.edu">Zhanteng Xie</maintainer>
+  <license>BSD</license>
+  <url type="website">https://github.com/</url>
+  <author email="zhanteng.xie@temple.edu">Zhanteng Xie</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>trajectory_msgs</build_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>nav_msgs</build_depend>
+  <build_depend>message_generation</build_depend>
+
+  <run_depend>message_runtime</run_depend>
+  <run_depend>geometry_msgs</run_depend>
+  <run_depend>trajectory_msgs</run_depend>
+  <run_depend>roscpp</run_depend>
+  <run_depend>rospy</run_depend>
+  <run_depend>std_msgs</run_depend>
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>nav_msgs</run_depend>
+
+  <run_depend>gazebo_ros</run_depend>
+  <export>
+    <gazebo_ros gazebo_media_path="${prefix}/world"/>
+  </export>
+</package>

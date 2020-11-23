@@ -1,0 +1,29 @@
+<launch>
+  <arg name="pose_initial_x" default="-1.6"/>
+  <arg name="pose_initial_y" default="-1.75"/>
+  <arg name="pose_initial_theta" default="0"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="use_sim_time" value="true"/>
+    <arg name="debug" value="false"/>
+    <arg name="world_name" value="$(find followbot)/world/agv_warehouse.world"/>
+  </include>
+
+  <include file="$(find followbot)/launch/includes/kobuki.launch.xml">
+    <arg name="base" value="kobuki"/>
+    <arg name="stacks" value="hexagons"/>
+    <arg name="3d_sensor" value="hokuyo_kinect"/>
+    <arg name="initial_pose" value="-x $(arg pose_initial_x) -y $(arg pose_initial_y) -Y $(arg pose_initial_theta)"/>
+  </include>
+
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+    <param name="publish_frequency" type="double" value="30.0" />
+  </node>
+
+  <!-- Followbot detector -->
+  <node pkg="followbot" type="follower_detector.py" name="follower_detector" output="screen" required="true"/>
+  <!-- Followbot P-controller -->
+  <node pkg="followbot" type="follower_p_controller.py" name="follower_p_controller" output="screen" required="true"/>
+
+</launch>
+
