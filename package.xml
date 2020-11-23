@@ -5,7 +5,7 @@
   <description>Followbot package for the warehouse</description>
   <maintainer email="zhanteng.xie@temple.edu">Zhanteng Xie</maintainer>
   <license>BSD</license>
-  <url type="website">https://github.com/</url>
+  <url type="website">https://github.com/TempleRAIL/followbot.git</url>
   <author email="zhanteng.xie@temple.edu">Zhanteng Xie</author>
 
   <buildtool_depend>catkin</buildtool_depend>
