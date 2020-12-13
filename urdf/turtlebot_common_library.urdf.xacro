@@ -4,7 +4,7 @@
          -->
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
   <!-- General -->
-  <xacro:include filename="$(find robot_gazebo)/urdf/common_properties.urdf.xacro"/>
-  <xacro:include filename="$(find robot_gazebo)/urdf/turtlebot_properties.urdf.xacro"/>
-  <!--<xacro:include filename="$(find robot_gazebo)/urdf/sensors/hokuyo.urdf.xacro"/>-->
+  <xacro:include filename="$(find followbot)/urdf/common_properties.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/turtlebot_properties.urdf.xacro"/>
+  <!--<xacro:include filename="$(find followbot)/urdf/sensors/hokuyo.urdf.xacro"/>-->
 </robot>

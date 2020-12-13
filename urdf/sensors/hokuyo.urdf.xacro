@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!-- script_version=1.1 -->
 <robot name="sensor_hokuyo" xmlns:xacro="http://ros.org/wiki/xacro">
-  <xacro:include filename="$(find robot_gazebo)/urdf/common_properties.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/common_properties.urdf.xacro"/>
 
   <!-- RPLidar 2D LIDAR -->
   <xacro:macro name="sensor_hokuyo" params="parent">
@@ -23,7 +23,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://robot_gazebo/meshes/sensors/hokuyo.dae" />
+        <mesh filename="package://followbot/meshes/sensors/hokuyo.dae" />
       </geometry>
     </visual>
 
