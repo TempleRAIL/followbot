@@ -8,6 +8,7 @@ A gazebo simulation platform where the automated guided vehicle (AGV) follows th
 
 # Usage
 ## install: 
+In order to install necessary requirements, run:
 ```Bash
 sudo apt-get install ros-kinetic-turtlebot
 sudo apt-get install ros-kinetic-turtlebot-simulator
