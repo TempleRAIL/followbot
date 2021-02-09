@@ -2,6 +2,8 @@
   <arg name="pose_initial_x" default="-1.6"/>
   <arg name="pose_initial_y" default="-1.75"/>
   <arg name="pose_initial_theta" default="0"/>
+  
+  <arg name="record" default="false"/>
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="use_sim_time" value="true"/>
@@ -24,6 +26,10 @@
   <node pkg="followbot" type="follower_detector.py" name="follower_detector" output="screen" required="true"/>
   <!-- Followbot P-controller -->
   <node pkg="followbot" type="follower_p_controller.py" name="follower_p_controller" output="screen" required="true"/>
+  
+  <node pkg="rosbag" type="record" name="rosbag"
+        args="-o $(env HOME)/followbot_ /clock /detection_measurements /odom /tf /tf_static"
+        if="$(arg record)"/>
 
 </launch>
 
