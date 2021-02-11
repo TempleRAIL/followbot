@@ -12,7 +12,11 @@ In order to install necessary requirements, run:
 ```Bash
 sudo apt-get install ros-kinetic-turtlebot
 sudo apt-get install ros-kinetic-turtlebot-simulator
+sudo apt-get install ros-kinetic-kobuki*
+cd ~/catkin_ws/src
 git clone https://github.com/TempleRAIL/followbot.git
+cd ..
+catkin_make
 ``` 
 
 ## run: 
