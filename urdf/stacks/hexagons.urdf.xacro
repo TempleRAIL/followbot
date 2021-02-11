@@ -20,7 +20,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://turtlebot_description/meshes/stacks/hexagons/pole_bottom.dae"/>
+          <mesh filename="package://followbot/meshes/stacks/hexagons/pole_bottom.dae"/>
         </geometry>
       </visual>
       <collision>
@@ -49,7 +49,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 ${M_PI} 0"/>
         <geometry>
-          <mesh filename="package://turtlebot_description/meshes/stacks/hexagons/pole_middle.dae"/>
+          <mesh filename="package://followbot/meshes/stacks/hexagons/pole_middle.dae"/>
         </geometry>
       </visual>
       <collision>
@@ -78,7 +78,7 @@
       <visual>
         <origin xyz=" 0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://turtlebot_description/meshes/stacks/hexagons/pole_top.dae"/>
+          <mesh filename="package://followbot/meshes/stacks/hexagons/pole_top.dae"/>
         </geometry>
       </visual>
       <collision>
@@ -108,7 +108,7 @@
       <!--<visual>-->
         <!--<origin xyz="0 0 -0.01" rpy="0 0 0"/>-->
         <!--<geometry>-->
-          <!--<mesh filename="package://turtlebot_description/meshes/sensors/sensor_pole.dae" />-->
+          <!--<mesh filename="package://followbot/meshes/sensors/sensor_pole.dae" />-->
         <!--</geometry>-->
       <!--</visual>-->
       <!--<collision>-->
@@ -149,7 +149,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://turtlebot_description/meshes/stacks/hexagons/plate_bottom.dae"/>
+          <mesh filename="package://followbot/meshes/stacks/hexagons/plate_bottom.dae"/>
         </geometry>
       </visual>  
       <collision>
@@ -181,7 +181,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://turtlebot_description/meshes/stacks/hexagons/plate_middle.dae"/>
+          <mesh filename="package://followbot/meshes/stacks/hexagons/plate_middle.dae"/>
         </geometry>
       </visual>  
       <collision>
@@ -215,7 +215,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://turtlebot_description/meshes/stacks/hexagons/plate_top.dae"/>
+          <mesh filename="package://followbot/meshes/stacks/hexagons/plate_top.dae"/>
         </geometry>
       </visual>  
       <collision>

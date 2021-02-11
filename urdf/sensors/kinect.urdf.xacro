@@ -4,13 +4,10 @@
   <xacro:include filename="$(find followbot)/urdf/turtlebot_properties.urdf.xacro"/>
   
   <xacro:property name="kinect_cam_py" value="-0.0125"/>
-  <xacro:property name="cam_or" value="0"/>
-  <xacro:property name="cam_op" value="${M_PI/2}"/>
-  <xacro:property name="cam_oy" value="0"/>
   <!-- Parameterised in part by the values in turtlebot_properties.urdf.xacro -->
   <xacro:macro name="sensor_kinect" params="parent">
     <joint name="camera_rgb_joint" type="fixed">
-      <origin xyz="0.18 ${kinect_cam_py} 0.19" rpy="${cam_or} ${cam_op} ${cam_oy}"/>
+      <origin xyz="${cam_px} ${kinect_cam_py} ${cam_pz}" rpy="${cam_or} ${cam_op} ${cam_oy}"/>
       <parent link="${parent}"/>
       <child link="camera_rgb_frame" />
     </joint>
