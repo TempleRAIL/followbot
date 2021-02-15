@@ -70,7 +70,7 @@ class Detector:
     mask_blue[0:search_top, 0:w] = 0
     mask_blue[search_bot:h, 0:w] = 0
     M_left = cv2.moments(mask_blue)
-    # blue: right marker 
+    # red: right marker 
     mask_red[0:search_top, 0:w] = 0
     mask_red[search_bot:h, 0:w] = 0
     M_right = cv2.moments(mask_red)
@@ -87,9 +87,16 @@ class Detector:
       # get position from point cloud
       idx = cx + cy*w
       cloud_points = list(point_cloud2.read_points(pcl_msg, skip_nans=True, field_names = ("x", "y", "z")))
+      '''
+      # turtlbot2:
       self.x = -cloud_points[idx][1] + 0.18
       self.y = -cloud_points[idx][0] - 0.0125
-      self.z = -cloud_points[idx][2] + 0.19
+      self.z = -cloud_points[idx][2] + 0.19 + 0.0102
+      '''
+      # fred robot:
+      self.x = -cloud_points[idx][1] + 0.72
+      self.y = -cloud_points[idx][0] - 0.0125
+      self.z = -cloud_points[idx][2] + 0.167
       rospy.loginfo("Detect tape: (" + str(self.x) + ", " + str(self.y) + ", " + str(self.z) + ")")     
     else:
       self.tape_detect = 0

@@ -22,30 +22,30 @@
      Note: REP needs to be updated with the information below 
      (currently in development and awaiting feedback)
    -->
-	<xacro:property name="cam_px" value="0.18" />
+	<xacro:property name="cam_px" value="0.72" />
 <!--	<xacro:property name="cam_py" value="-0.0125" /> Y varies for different configurations. get sets in sensors_urdf -->
-	<xacro:property name="cam_pz" value="0.19" />
+	<xacro:property name="cam_pz" value="0.0" />
   <xacro:property name="cam_or" value="0"/>
   <xacro:property name="cam_op" value="${M_PI/2}"/>
   <xacro:property name="cam_oy" value="0"/>
 
-    <!--
-   ======================================================================
-   - REP 119 : Hokuyo laser link relative to the Base link 
-   ====================================================================== 
-     Base link is currently defined as the rotational centre on the bottom
-     of the base mould. For both create and kobuki this is actually exactly
-     the same 3d world point. 
-     
-     This may cause an issue with a base with much different floor clearance.
-     Should we be using base_footprint for this specification instead?
- 
-     Note: REP needs to be updated with the information below 
-     (currently in development and awaiting feedback)
-   -->
-	<xacro:property name="laser_px" value="0.1" />
+  <!--
+  ======================================================================
+  - REP 119 : Hokuyo laser link relative to the Base link 
+  ====================================================================== 
+    Base link is currently defined as the rotational centre on the bottom
+    of the base mould. For both create and kobuki this is actually exactly
+    the same 3d world point. 
+    
+    This may cause an issue with a base with much different floor clearance.
+    Should we be using base_footprint for this specification instead?
+
+    Note: REP needs to be updated with the information below 
+    (currently in development and awaiting feedback)
+  -->
+	<xacro:property name="laser_px" value="0.6" />
 	<xacro:property name="laser_py" value="0" />
-	<xacro:property name="laser_pz" value="0.43" />
+	<xacro:property name="laser_pz" value="0.172" />
   <xacro:property name="laser_or" value="0"/>
   <xacro:property name="laser_op" value="0"/>
   <xacro:property name="laser_oy" value="0"/>

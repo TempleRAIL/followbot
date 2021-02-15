@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <!-- script_version=1.1 -->
 <robot name="sensor_hokuyo" xmlns:xacro="http://ros.org/wiki/xacro">
-  <xacro:include filename="$(find followbot)/urdf/common_properties.urdf.xacro"/>
-  <xacro:include filename="$(find followbot)/urdf/turtlebot_properties.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/fred/fred_gazebo.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/fred/fred_properties.urdf.xacro"/>
 
   <!-- RPLidar 2D LIDAR -->
   <xacro:macro name="sensor_hokuyo" params="parent">
@@ -36,6 +36,6 @@
     </link>
 
     <!-- Set up laser gazebo details -->
-    <turtlebot_sim_2dsensor/>
+    <fred_sim_2dsensor/>
   </xacro:macro>
 </robot>

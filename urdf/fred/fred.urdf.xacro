@@ -1,0 +1,241 @@
+<?xml version="1.0"?>
+<robot name="fred" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:include filename="$(find followbot)/urdf/fred/common_properties.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/fred/fred_base_gazebo.urdf.xacro"/>
+
+  <!-- Fred -->
+  <xacro:macro name="fred">
+    <link name="base_footprint"/>
+    <joint name="base_joint" type="fixed">
+      <origin xyz="0 0 ${0.137+0.03}" rpy="0 0 0" />
+      <parent link="base_footprint"/>
+      <child link="base_link" />
+    </joint>
+    
+    <!-- Chassis -->	
+    <link name="base_link">
+      <visual>
+        <geometry>
+          <!--box size="1.328 1.125 0.274"/-->
+          <mesh filename="package://followbot/meshes/fred/fred_body.dae" />  
+        </geometry>
+        <!--material name="silver">
+          <color rgba="0.75 0.75 0.75 1"/>
+        </material-->
+      </visual>
+      <collision>
+        <geometry>
+          <box size="1.328 1.125 0.274"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <!-- Box inertial calculation:
+              m = 206 kg; l = 1.328 m; w = 1.125 m; h = 0.274m;
+              ixx = 1/12 * m * (w^2 + h^2)
+              iyy = 1/12 * m * (l^2 + h^2)
+              izz = 1/12 * m * (l^2 + w^2)
+        -->
+        <mass value="206.0"/>
+        <inertia ixx="23.0154" iyy="31.5637" izz="52.0014" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+
+      <!-- left wheel -->	
+    <joint name="wheel_left_joint" type="continuous">
+      <axis xyz="0 0 1"/>
+      <parent link="base_link"/>
+      <child link="wheel_left_link"/>
+      <origin rpy="${-M_PI/2} 0 0" xyz="0 0.331 -0.04"/>
+    </joint>
+    <link name="wheel_left_link">
+      <visual>
+        <geometry>
+          <!--cylinder length="0.0762" radius="0.127"/-->
+          <mesh filename="package://followbot/meshes/fred/fred_wheel.dae" /> 
+        </geometry>
+        <!--material name="black">
+          <color rgba="0 0 0 1"/>
+        </material-->
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder length="0.0762" radius="0.127"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <!-- Cylinder inertial calculation:
+              m = 5 kg; h = 0.0762 m; r = 0.127 m
+              ixx = 1/12 * m * (3 * r^2 + h^2)
+              iyy = 1/12 * m * (3 * r^2 + h^2)
+              izz = 1/2 * m * r^2
+        -->
+        <mass value="5"/>
+        <inertia ixx="0.0226" iyy="0.0226" izz="0.0403" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+
+    <!-- Right wheel -->	
+    <joint name="wheel_right_joint" type="continuous">
+      <axis xyz="0 0 1"/>
+      <parent link="base_link"/>
+      <child link="wheel_right_link"/>
+      <origin rpy="${-M_PI/2} 0 0" xyz="0 -0.331 -0.04"/>
+    </joint>
+    <link name="wheel_right_link">
+      <visual>
+        <geometry>
+          <!--cylinder length="0.0762" radius="0.127"/-->
+          <mesh filename="package://followbot/meshes/fred/fred_wheel.dae" /> 
+        </geometry>
+        <!--material name="black">
+          <color rgba="0 0 0 1"/>
+        </material-->
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder length="0.0762" radius="0.127"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <!-- Cylinder inertial calculation:
+              m = 5 kg; h = 0.0762 m; r = 0.127 m
+              ixx = 1/12 * m * (3 * r^2 + h^2)
+              iyy = 1/12 * m * (3 * r^2 + h^2)
+              izz = 1/2 * m * r^2
+        -->
+        <mass value="5"/>
+        <inertia ixx="0.0226" iyy="0.0226" izz="0.0403" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+
+    <!-- Front caster -->	
+    <joint name="caster_front_joint" type="fixed">
+      <axis xyz="0 0 1"/>
+      <parent link="base_link"/>
+      <child link="caster_front_link"/>
+      <origin rpy="${-M_PI/2} 0 0" xyz="0.515 0 -0.038"/>
+    </joint>	
+    <link name="caster_front_link">
+      <visual>
+        <geometry>
+          <!--cylinder length="0.165" radius="0.127"/-->
+          <mesh filename="package://followbot/meshes/fred/caster_wheel.dae" /> 
+        </geometry>
+        <!--material name="black"/-->
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder length="0.165" radius="0.127"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <!-- Cylinder inertial calculation:
+              m = 5 kg; h = 0.165 m; r = 0.127 m
+              ixx = 1/12 * m * (3 * r^2 + h^2)
+              iyy = 1/12 * m * (3 * r^2 + h^2)
+              izz = 1/2 * m * r^2
+        -->
+        <mass value="5"/>
+        <inertia ixx="0.0315" iyy="0.0315" izz="0.0403" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+
+    <!-- Back caster -->	
+    <joint name="caster_back_joint" type="fixed">
+      <axis xyz="0 0 1"/>
+      <parent link="base_link"/>
+      <child link="caster_back_link"/>
+      <origin rpy="${-M_PI/2} 0 0" xyz="-0.515 0 -0.038"/>
+    </joint>	
+    <link name="caster_back_link">
+      <visual>
+        <geometry>
+          <!--cylinder length="0.165" radius="0.127"/-->
+          <mesh filename="package://followbot/meshes/fred/caster_wheel.dae" /> 
+        </geometry>
+        <!--material name="black"/-->
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder length="0.165" radius="0.127"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <!-- Cylinder inertial calculation:
+              m = 5 kg; h = 0.165 m; r = 0.127 m
+              ixx = 1/12 * m * (3 * r^2 + h^2)
+              iyy = 1/12 * m * (3 * r^2 + h^2)
+              izz = 1/2 * m * r^2
+        -->
+        <mass value="5"/>
+        <inertia ixx="0.0315" iyy="0.0315" izz="0.0403" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+
+    <!-- Fred's sensors -->
+    <joint name="gyro_joint" type="fixed">
+      <axis xyz="0 1 0"/>
+      <origin xyz="0.664 0.5 -0.137" rpy="0 0 0"/>
+      <parent link="base_link"/>
+      <child link="gyro_link"/>
+    </joint>
+    <link name="gyro_link">
+      <inertial>
+        <mass value="0.001"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.0001" ixy="0" ixz="0"
+                 iyy="0.000001" iyz="0"
+                 izz="0.0001"/>
+      </inertial>
+    </link>
+
+    <joint name="cliff_sensor_left_joint" type="fixed">
+      <origin xyz="0.664 0.5625 -0.137" rpy="0 ${M_PI/2} 0" />
+      <parent link="base_link"/>
+      <child link="cliff_sensor_left_link" />
+    </joint>
+    <link name="cliff_sensor_left_link">
+      <inertial>
+        <mass value="0.0001" />
+        <origin xyz="0 0 0" />
+        <inertia ixx="0.0001" ixy="0.0" ixz="0.0"
+                 iyy="0.0001" iyz="0.0"
+                 izz="0.0001" />
+      </inertial>
+    </link>
+
+    <joint name="cliff_sensor_right_joint" type="fixed">
+      <origin xyz="0.664 -0.5625 -0.137" rpy="0 ${M_PI/2} 0" />
+      <parent link="base_link"/>
+      <child link="cliff_sensor_right_link" />
+    </joint>
+    <link name="cliff_sensor_right_link">
+      <inertial>
+        <mass value="0.0001" />
+        <origin xyz="0 0 0" />
+        <inertia ixx="0.0001" ixy="0.0" ixz="0.0"
+                 iyy="0.0001" iyz="0.0"
+                 izz="0.0001" />
+      </inertial>
+    </link>
+
+    <joint name="cliff_sensor_front_joint" type="fixed">
+      <origin xyz="0.664 0.00 -0.137" rpy="0 ${M_PI/2} 0" />
+      <parent link="base_link"/>
+      <child link="cliff_sensor_front_link" />
+    </joint>
+    <link name="cliff_sensor_front_link">
+      <inertial>
+        <mass value="0.0001" />
+        <origin xyz="0 0 0" />
+        <inertia ixx="0.0001" ixy="0.0" ixz="0.0"
+                 iyy="0.0001" iyz="0.0"
+                 izz="0.0001" />
+      </inertial>
+    </link>
+
+    <!-- Fred Gazebo simulation details -->
+    <fred_sim/>
+
+  </xacro:macro>
+</robot>
