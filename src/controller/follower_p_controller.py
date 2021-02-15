@@ -36,7 +36,7 @@ class Follower:
       self.twist.linear.x = 0.2
       '''
       # turtlbot:
-      self.twist.angular.z = -float(err) / 200
+      self.twist.angular.z = -float(err) / 100
       '''
       # fred robot:
       self.twist.angular.z = -float(err) / 200
