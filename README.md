@@ -1,7 +1,12 @@
 # followbot
 A gazebo simulation platform where the automated guided vehicle (AGV) follows the green tape strip laid on the floor. 
 ## warehouse: 
+1. fred robot:
+
 ![avg_warehouse](https://github.com/TempleRAIL/followbot/blob/master/images/avg_warehouse_fred_robot.png)
+
+2. turtlebot:
+
 ![avg_warehouse](https://github.com/TempleRAIL/followbot/blob/master/images/avg_warehouse.png)
 
 ## tape detection:
