@@ -61,6 +61,7 @@ catkin_install_python(PROGRAMS
   src/calibration/hsv_color_finder.py
   src/controller/follower_p_controller.py
   src/detector/follower_detector.py
+  src/detector/marker_identifier.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

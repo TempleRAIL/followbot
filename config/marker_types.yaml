@@ -1,0 +1,14 @@
+marker_types:
+  - command: turn_left
+    layout: [1, 0]
+    
+  - command: turn_right
+    layout: [0, 1]
+  
+  - command: stop
+    layout: [1, 1]
+  
+  - command: reverse
+    layout: [1, 1,
+             0, 1,
+             1, 1]
