@@ -70,7 +70,6 @@ class Detector:
     if M_tape['m00'] > 0:
       # make measurement
       m_track = Measurement()
-      m_track.header = detections_msg.header
       m_track.type = Measurement.TRACK
       # draw point:
       cx = int(M_tape['m10']/M_tape['m00'])
@@ -96,8 +95,7 @@ class Detector:
     if M_left['m00'] > 0:
       # make measurement
       m_left = Measurement()
-      m_left.header = detections_msg.header
-      m_left.type = Measurement.LEFT
+      m_left.type = Measurement.MARKER
       # draw point:
       cx = int(M_left['m10']/M_left['m00'])
       cy = int(M_left['m01']/M_left['m00'])
@@ -112,8 +110,7 @@ class Detector:
     if M_right['m00'] > 0:
       # make measurement
       m_right = Measurement()
-      m_right.header = detections_msg.header
-      m_right.type = Measurement.RIGHT
+      m_right.type = Measurement.MARKER
       # draw point:
       cx = int(M_right['m10']/M_right['m00'])
       cy = int(M_right['m01']/M_right['m00'])

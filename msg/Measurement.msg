@@ -1,7 +1,5 @@
 uint8 TRACK=0
-uint8 LEFT=1
-uint8 RIGHT=2
+uint8 MARKER=1
 
-Header header
-int8 type # TRACK, LEFT, or RIGHT
+int8 type # TRACK or MARKER
 float32 position # position in the sensor frame
