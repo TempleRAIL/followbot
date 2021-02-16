@@ -97,7 +97,7 @@ class Detector:
       self.x = -cloud_points[idx][1] + 0.72
       self.y = -cloud_points[idx][0] - 0.0125
       self.z = -cloud_points[idx][2] + 0.167
-      rospy.loginfo("Detect tape: (" + str(self.x) + ", " + str(self.y) + ", " + str(self.z) + ")")     
+      rospy.logdebug("Detect tape: (" + str(self.x) + ", " + str(self.y) + ", " + str(self.z) + ")")     
     else:
       self.tape_detect = 0
       self.u = 0
@@ -113,7 +113,7 @@ class Detector:
       cy = int(M_left['m01']/M_left['m00'])
       cv2.circle(cv_image, (cx, cy), 10, (120,255,120), -1)
       self.left_marker = 1
-      rospy.loginfo("Detect left marker")
+      rospy.logdebug("Detect left marker")
     else:
       self.left_marker = 0
 
@@ -124,7 +124,7 @@ class Detector:
       cy = int(M_right['m01']/M_right['m00'])
       cv2.circle(cv_image, (cx, cy), 10, (120,255,120), -1)
       self.right_marker = 1
-      rospy.loginfo("Detect right marker")
+      rospy.logdebug("Detect right marker")
     else:
       self.right_marker = 0
 
