@@ -6,7 +6,7 @@ from followbot.msg import MGSMeasurements, MGSMeasurement
 
 class Follower:
   def __init__(self):
-    self.measurement_sub = rospy.Subscriber('detection_measurements', MGSMeasurements, self.callback)
+    self.measurement_sub = rospy.Subscriber('mgs', MGSMeasurements, self.callback)
     self.cmd_vel_pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, queue_size=1)
     self.twist = Twist()
     self.omega_prev = 0.0

@@ -16,7 +16,7 @@ class Detector:
     self.odom_sub = message_filters.Subscriber('odom', Odometry)   
     self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub, self.pcl_sub, self.odom_sub], queue_size=5, slop=0.1)
     self.measurements.registerCallback(self.measurement_callback)
-    self.measurements_pub = rospy.Publisher('detection_measurements', MGSMeasurements, queue_size=10)
+    self.measurements_pub = rospy.Publisher('mgs', MGSMeasurements, queue_size=10)
     self.detection_img_pub = rospy.Publisher('detection_image', Image, queue_size=10)
 
   def measurement_callback(self, img_msg, pcl_msg, odom_msg):
