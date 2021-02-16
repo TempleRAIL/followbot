@@ -5,7 +5,7 @@ from sensor_msgs.msg import Image, PointCloud2
 import message_filters 
 from sensor_msgs import point_cloud2
 from nav_msgs.msg import Odometry
-from followbot.msg import Measurement, Measurements
+from followbot.msg import MGSMeasurement, MGSMeasurements
 
 class Detector:
   def __init__(self):
@@ -16,12 +16,12 @@ class Detector:
     self.odom_sub = message_filters.Subscriber('odom', Odometry)   
     self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub, self.pcl_sub, self.odom_sub], queue_size=5, slop=0.1)
     self.measurements.registerCallback(self.measurement_callback)
-    self.measurements_pub = rospy.Publisher('detection_measurements', Measurements, queue_size=10)
+    self.measurements_pub = rospy.Publisher('detection_measurements', MGSMeasurements, queue_size=10)
     self.detection_img_pub = rospy.Publisher('detection_image', Image, queue_size=10)
 
   def measurement_callback(self, img_msg, pcl_msg, odom_msg):
     # Initalize measurements:
-    detections_msg = Measurements()
+    detections_msg = MGSMeasurements()
     detections_msg.header.stamp = rospy.Time.now()
     detections_msg.header.frame_id = 'base_footprint'
     detections_msg.odometry = odom_msg
@@ -69,8 +69,8 @@ class Detector:
     # tape detect 
     if M_tape['m00'] > 0:
       # make measurement
-      m_track = Measurement()
-      m_track.type = Measurement.TRACK
+      m_track = MGSMeasurement()
+      m_track.type = MGSMeasurement.TRACK
       # draw point:
       cx = int(M_tape['m10']/M_tape['m00'])
       cy = int(M_tape['m01']/M_tape['m00'])
@@ -94,8 +94,8 @@ class Detector:
     # left marker: 
     if M_left['m00'] > 0:
       # make measurement
-      m_left = Measurement()
-      m_left.type = Measurement.MARKER
+      m_left = MGSMeasurement()
+      m_left.type = MGSMeasurement.MARKER
       # draw point:
       cx = int(M_left['m10']/M_left['m00'])
       cy = int(M_left['m01']/M_left['m00'])
@@ -109,8 +109,8 @@ class Detector:
     # right marker: 
     if M_right['m00'] > 0:
       # make measurement
-      m_right = Measurement()
-      m_right.type = Measurement.MARKER
+      m_right = MGSMeasurement()
+      m_right.type = MGSMeasurement.MARKER
       # draw point:
       cx = int(M_right['m10']/M_right['m00'])
       cy = int(M_right['m01']/M_right['m00'])

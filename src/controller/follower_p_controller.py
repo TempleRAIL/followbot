@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 # BEGIN ALL
-import rospy, cv2, cv_bridge, numpy
-from sensor_msgs.msg import Image
+import rospy
 from geometry_msgs.msg import Twist
-from followbot.msg import Measurements, Measurement
+from followbot.msg import MGSMeasurements, MGSMeasurement
 
 class Follower:
   def __init__(self):
-    self.bridge = cv_bridge.CvBridge()
-    self.measurement_sub = rospy.Subscriber('detection_measurements', Measurements, self.callback)
+    self.measurement_sub = rospy.Subscriber('detection_measurements', MGSMeasurements, self.callback)
     self.cmd_vel_pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, queue_size=1)
     self.twist = Twist()
     self.omega_prev = 0.0
@@ -18,7 +16,7 @@ class Follower:
     # get tape position
     pos = None
     for m in msg.measurements:
-      if m.type == Measurement.TRACK:
+      if m.type == MGSMeasurement.TRACK:
         pos = m.position
     
     # set forward velocity

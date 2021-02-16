@@ -1,3 +1,3 @@
 Header header
 nav_msgs/Odometry odometry   # robot odometry in global frame
-Measurement[] measurements   # detection measurements
+MGSMeasurement[] measurements   # detection measurements

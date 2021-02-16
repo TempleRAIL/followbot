@@ -29,8 +29,8 @@ catkin_python_setup()
 add_message_files(
   DIRECTORY msg
   FILES
-  Measurement.msg
-  Measurements.msg
+  MGSMeasurement.msg
+  MGSMeasurements.msg
 )
 
 generate_messages(
