@@ -9,18 +9,6 @@ from followbot.msg import Measurement, Measurements
 
 class Detector:
   def __init__(self):
-    # measurement:
-    self.tape_detect = 0
-    self.left_marker = 0
-    self.right_marker = 0
-    # image coordinate:
-    self.u = 0
-    self.v = 0
-    # target position:
-    self.x = 0
-    self.y = 0
-    self.z = 0
-
     # ros
     self.bridge = cv_bridge.CvBridge()
     self.img_sub = message_filters.Subscriber('camera/rgb/image_raw', Image)
@@ -38,6 +26,9 @@ class Detector:
     detections_msg.header.frame_id = 'base_footprint'
     detections_msg.odometry = odom_msg
     detections_msg.measurements = []
+
+    # read point cloud data
+    cloud_points = list(point_cloud2.read_points(pcl_msg, skip_nans=True, field_names = ("x", "y", "z")))
 
     # read image:
     try:
@@ -77,16 +68,16 @@ class Detector:
 
     # tape detect 
     if M_tape['m00'] > 0:
+      # make measurement
+      m_track = Measurement()
+      m_track.header = detections_msg.header
+      m_track.type = Measurement.TRACK
       # draw point:
       cx = int(M_tape['m10']/M_tape['m00'])
       cy = int(M_tape['m01']/M_tape['m00'])
       cv2.circle(cv_image, (cx, cy), 20, (0,0,255), -1)
-      self.tape_detect = 1
-      self.u = cx
-      self.v = cy
       # get position from point cloud
       idx = cx + cy*w
-      cloud_points = list(point_cloud2.read_points(pcl_msg, skip_nans=True, field_names = ("x", "y", "z")))
       '''
       # turtlbot2:
       self.x = -cloud_points[idx][1] + 0.18
@@ -94,59 +85,51 @@ class Detector:
       self.z = -cloud_points[idx][2] + 0.19 + 0.0102
       '''
       # fred robot:
-      self.x = -cloud_points[idx][1] + 0.72
-      self.y = -cloud_points[idx][0] - 0.0125
-      self.z = -cloud_points[idx][2] + 0.167
-      rospy.logdebug("Detect tape: (" + str(self.x) + ", " + str(self.y) + ", " + str(self.z) + ")")     
-    else:
-      self.tape_detect = 0
-      self.u = 0
-      self.v = 0
-      self.x = 0
-      self.y = 0
-      self.z = 0
+      # self.x = -cloud_points[idx][1] + 0.72
+      # self.y = -cloud_points[idx][0] - 0.0125
+      # self.z = -cloud_points[idx][2] + 0.167
+      m_track.position = -cloud_points[idx][0] - 0.0125
+      # rospy.logdebug("Detect tape: (" + str(self.x) + ", " + str(self.y) + ", " + str(self.z) + ")")     
+      detections_msg.measurements.append(m_track)
 
     # left marker: 
     if M_left['m00'] > 0:
+      # make measurement
+      m_left = Measurement()
+      m_left.header = detections_msg.header
+      m_left.type = Measurement.LEFT
       # draw point:
       cx = int(M_left['m10']/M_left['m00'])
       cy = int(M_left['m01']/M_left['m00'])
       cv2.circle(cv_image, (cx, cy), 10, (120,255,120), -1)
-      self.left_marker = 1
+      # get position from point cloud
+      idx = cx + cy*w
+      m_left.position = -cloud_points[idx][0] - 0.0125
       rospy.logdebug("Detect left marker")
-    else:
-      self.left_marker = 0
+      detections_msg.measurements.append(m_left)
 
     # right marker: 
     if M_right['m00'] > 0:
+      # make measurement
+      m_right = Measurement()
+      m_right.header = detections_msg.header
+      m_right.type = Measurement.RIGHT
       # draw point:
       cx = int(M_right['m10']/M_right['m00'])
       cy = int(M_right['m01']/M_right['m00'])
       cv2.circle(cv_image, (cx, cy), 10, (120,255,120), -1)
-      self.right_marker = 1
+      # get position from point cloud
+      idx = cx + cy*w
+      m_right.position = -cloud_points[idx][0] - 0.0125
       rospy.logdebug("Detect right marker")
-    else:
-      self.right_marker = 0
+      detections_msg.measurements.append(m_right)
 
-    # get the detection measurement:
-    detection_measurement = Measurement()
-    detection_measurement.header.stamp = rospy.Time.now()
-    detection_measurement.header.frame_id = 'base_footprint'
-    detection_measurement.tape_detect = self.tape_detect
-    detection_measurement.left_marker = self.left_marker
-    detection_measurement.right_marker = self.right_marker
-    detection_measurement.u = self.u
-    detection_measurement.v = self.v
-    detection_measurement.x = self.x
-    detection_measurement.y = self.y
-    detection_measurement.z = self.z
-    detections_msg.measurements.append(detection_measurement)
     # publish the sphd measurements:
     self.measurements_pub.publish(detections_msg)
 
     # get the detection image:
     detection_img_msg = self.bridge.cv2_to_imgmsg(cv_image, "bgr8")
-    detection_img_msg.header.stamp = detection_measurement.header.stamp
+    detection_img_msg.header.stamp = detections_msg.header.stamp
     detection_img_msg.header.frame_id = 'camera_depth_optical_frame'
     try:
       self.detection_img_pub.publish(detection_img_msg)

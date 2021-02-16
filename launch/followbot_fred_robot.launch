@@ -33,8 +33,7 @@
   
   <!-- Rosbag record -->
   <node pkg="rosbag" type="record" name="rosbag"
-        args="-o $(env HOME)/followbot_ /clock /detection_measurements /odom /tf /tf_static"
+        args="-o $(env HOME)/followbot /clock /detection_measurements /odom /tf /tf_static"
         if="$(arg record)"/>
 
 </launch>
-
