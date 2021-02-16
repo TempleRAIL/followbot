@@ -65,7 +65,7 @@ catkin_install_python(PROGRAMS
 )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
-install(DIRECTORY images launch meshes robots urdf world
+install(DIRECTORY config images launch meshes robots urdf world
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 
