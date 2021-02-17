@@ -5,10 +5,10 @@ marker_types:
   - command: turn_right
     layout: [0, 1]
   
-  - command: stop
+  - command: stop 
     layout: [1, 1]
   
-  - command: reverse
+  - command: flip_polarity # used at the end of a loop
     layout: [1, 1,
              0, 1,
              1, 1]

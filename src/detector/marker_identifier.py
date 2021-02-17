@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # BEGIN ALL
+import functools
+import sys
+import numpy as np
+
 import rospy
 import rosparam
-import sys
-import functools
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
 from followbot.msg import MGSMeasurement, MGSMeasurements
 
 
@@ -13,7 +16,7 @@ class Identifier:
   def __init__(self):
     # ros
     self.mgs_sub = rospy.Subscriber('mgs', MGSMeasurements, self.mgs_callback)
-    # self.marker_pub = rospy.Publisher('mgs_marker', MGSMarker, queue_size=10)
+    self.marker_pub = rospy.Publisher('mgs_marker', String, queue_size=10)
     if rospy.has_param('~filename'):
       filename = rospy.get_param('~filename')
       self.marker_types = rosparam.load_file(filename)
@@ -22,9 +25,11 @@ class Identifier:
       rospy.logerr('Marker parameter file must exist')
       sys.exit(1)
     self.history = []
+    self.min_count = rospy.get_param('~min_count', 2)
 
 
   def mgs_callback(self, msg):
+    # TODO can add in delay to avoid compute marker early if missed detections in one frame
     if any([m.type == MGSMeasurement.MARKER for m in msg.measurements]):
       # add marker to history if detected
       self.history.append(msg)
@@ -36,31 +41,29 @@ class Identifier:
 
   def _compute_marker_type(self):
     rospy.loginfo('Identifying marker type')
-    marker_layout = []
-    prev_layout = None
-    for m in self.history:
-      layout = self._get_layout(m)
-      if prev_layout is None:
-        # add first marker
-        marker_layout.extend(layout)
-      else:
-        # check if layout changed
-        if not self._check_list_equality(prev_layout, layout):
-          marker_layout.extend(layout)
-      prev_layout = layout
-    print(marker_layout)
-    # TODO  fix issue where slight offsets causing wrong marker types
-    #       perhaps check how many instances of a layout there are to ignore very short ones and/or skip small gaps
-
+    # convert to numpy array
+    layout = np.zeros((len(self.history)+2, 2), dtype=int) # pad with initial and final row of zeros
+    for i, m in enumerate(self.history):
+      layout[i+1,:] = self._get_layout(m)
+    # only keep rows repeated at least min_count times
+    diff = np.sum(np.abs(np.diff(layout,axis=0)), axis=1) # compute differences between rows
+    index_diff = np.argwhere(diff) # indices where there are differences
+    marker_layout = [] # final layout
+    for j in range(len(index_diff)-1):
+      if index_diff[j+1] - index_diff[j] > self.min_count:
+        marker_layout.extend( layout[index_diff[j]+1,:].flatten().tolist() )
+    # TODO can recurse on this simplification to account for spurious misses within a strip
+    #   -need to merge two sections after filtering out abberant readings within
+    # check if marker matches any in library
     found = False
     for mt in self.marker_types:
       if self._check_list_equality(mt['layout'], marker_layout):
-        print(mt['command'])
         found = True
+        self.marker_pub.publish(mt['command'])
         break
     if not found:
-      print('marker type not defined')
-
+      rospy.logwarn('marker type not defined')
+    # reset history
     self.history = []
 
 
