@@ -23,7 +23,7 @@ class Detector:
     # Initalize measurements:
     detections_msg = MGSMeasurements()
     detections_msg.header.stamp = rospy.Time.now()
-    detections_msg.header.frame_id = 'base_footprint'
+    detections_msg.header.frame_id = pcl_msg.header.frame_id
     detections_msg.odometry = odom_msg
     detections_msg.measurements = []
 
@@ -50,20 +50,9 @@ class Detector:
     mask_red = cv2.inRange(hsv, lower_red, upper_red)
     
     # search area: 
-    h, w, d = cv_image.shape
-    search_top = 1*h/5
-    search_bot = search_top + 80
-    # green: tape detect 
-    mask_green[0:search_top, 0:w] = 0
-    mask_green[search_bot:h, 0:w] = 0
+    _, w, _ = cv_image.shape
     M_tape = cv2.moments(mask_green)
-    # blue: left marker 
-    mask_blue[0:search_top, 0:w] = 0
-    mask_blue[search_bot:h, 0:w] = 0
     M_left = cv2.moments(mask_blue)
-    # red: right marker 
-    mask_red[0:search_top, 0:w] = 0
-    mask_red[search_bot:h, 0:w] = 0
     M_right = cv2.moments(mask_red)
 
     # tape detect 

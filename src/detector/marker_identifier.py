@@ -6,7 +6,6 @@ import numpy as np
 
 import rospy
 import rosparam
-from nav_msgs.msg import Odometry
 from std_msgs.msg import String
 from followbot.msg import MGSMeasurement, MGSMeasurements
 
