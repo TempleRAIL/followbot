@@ -29,6 +29,7 @@ catkin_python_setup()
 add_message_files(
   DIRECTORY msg
   FILES
+  MGSCommand.msg
   MGSMeasurement.msg
   MGSMeasurements.msg
 )
@@ -62,6 +63,7 @@ catkin_install_python(PROGRAMS
   src/controller/follower_p_controller.py
   src/detector/follower_detector.py
   src/detector/marker_identifier.py
+  src/detector/line_mapper.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
