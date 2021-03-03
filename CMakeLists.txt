@@ -32,6 +32,7 @@ add_message_files(
   MGSCommand.msg
   MGSMeasurement.msg
   MGSMeasurements.msg
+  PathSegment.msg
 )
 
 generate_messages(

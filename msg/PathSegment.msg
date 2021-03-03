@@ -1,0 +1,4 @@
+string marker_start
+string marker_end
+float32[] breakpoints
+std_msgs/Float32MultiArray coefficients
