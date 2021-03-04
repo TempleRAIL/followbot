@@ -24,7 +24,7 @@ class Identifier:
       rospy.logerr('Marker parameter file must exist')
       sys.exit(1)
     self.history = []
-    self.min_count = rospy.get_param('~min_count', 2)
+    self.min_count = rospy.get_param('~min_count', 50)
 
 
   def mgs_callback(self, msg):
@@ -39,7 +39,6 @@ class Identifier:
     
 
   def _compute_marker_type(self):
-    rospy.loginfo('Identifying marker type')
     # convert to numpy array
     layout = np.zeros((len(self.history)+2, 2), dtype=int) # pad with initial and final row of zeros
     for i, m in enumerate(self.history):
@@ -58,10 +57,11 @@ class Identifier:
     for mt in self.marker_types:
       if self._check_list_equality(mt['layout'], marker_layout):
         found = True
+        rospy.loginfo('Found marker: {}'.format(mt['command']))
         self.marker_pub.publish(mt['command'])
         break
-    if not found:
-      rospy.logwarn('marker type not defined')
+    if marker_layout and not found:
+      rospy.logwarn('Marker layout not defined: {}'.format(marker_layout))
     # reset history
     self.history = []
 
