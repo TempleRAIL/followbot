@@ -38,7 +38,7 @@
   </node>
   
   <!-- Followbot line mapper -->
-  <node pkg="followbot" type="line_mapper.py" name="line_mapper" output="screen" required="true">
+  <node pkg="followbot" type="segment_mapper.py" name="segment_mapper" output="screen" required="true">
     <param name="num_points_curvature" value="50"/>
   </node>
 

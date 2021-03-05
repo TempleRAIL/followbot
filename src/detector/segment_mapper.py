@@ -16,8 +16,7 @@ from std_msgs.msg import String, MultiArrayDimension
 from followbot.msg import MGSMeasurement, MGSMeasurements, MGSMarker, PathSegment
 
 
-
-class LineMapper:
+class SegmentMapper:
 
   def __init__(self):
     # ros
@@ -90,12 +89,12 @@ class LineMapper:
     pts = np.delete(pts, idx, axis=1)
     spl = CubicSpline(s, pts, axis=1)
 
-    # Interpolate by a fixed distance to limit size of message
+    # Interpolate by a fixed distance to limit size of message and regenerate spline
     n_steps = np.ceil(s[-1] / self.step_size)
-    s = np.linspace(0, s[-1], n_steps)
-    pts = spl(s)
-    print(s)
-    print(pts)
+    if n_steps > 2:
+      s = np.linspace(0, s[-1], n_steps)
+      pts = spl(s)
+      spl = CubicSpline(s, pts, axis=1)
 
     # Publish segment data
     p = PathSegment()
@@ -108,7 +107,7 @@ class LineMapper:
     p.coefficients.data = spl.c.flatten()
     self.segment_pub.publish(p)
 
-    self.marker_prev = p.marker_end
+    self.marker_prev = msg
     
     # plt.plot(pts[0,:], pts[1,:], 'ro', ms=5)
     # plt.plot(spl(s)[0,:], spl(s)[1,:], 'b', lw=3)
@@ -130,7 +129,7 @@ class LineMapper:
 
 
 if __name__ == '__main__':
-  rospy.init_node('line_mapper')
-  mapper = LineMapper()
+  rospy.init_node('segment_mapper')
+  mapper = SegmentMapper()
   rospy.spin()
 # END ALL
