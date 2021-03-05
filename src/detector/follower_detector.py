@@ -31,8 +31,6 @@ class Detector:
       self.follow_left = True
     elif msg.command == MGSCommand.FOLLOW_RIGHT:
       self.follow_left = False
-    else:
-      rospy.error('Command not defined')
     
 
   def measurement_callback(self, img_msg, pcl_msg, odom_msg):

@@ -1,8 +1,8 @@
 marker_types:
-  - command: turn_left
+  - command: follow_left
     layout: [1, 0]
     
-  - command: turn_right
+  - command: follow_right
     layout: [0, 1]
   
   - command: stop 
