@@ -13,7 +13,7 @@ import tf2_ros
 from tf2_geometry_msgs import PointStamped
 from geometry_msgs.msg import Point
 from std_msgs.msg import String, MultiArrayDimension
-from followbot.msg import MGSMeasurement, MGSMeasurements, PathSegment
+from followbot.msg import MGSMeasurement, MGSMeasurements, MGSMarker, PathSegment
 
 
 
@@ -24,12 +24,15 @@ class LineMapper:
     self.tfBuffer = tf2_ros.Buffer(cache_time=rospy.Duration(60.))
     self.listener = tf2_ros.TransformListener(self.tfBuffer)
     self.mgs_sub = rospy.Subscriber('mgs', MGSMeasurements, self.mgs_callback)
-    self.marker_sub = rospy.Subscriber('mgs_marker', String, self.marker_callback)
+    self.marker_sub = rospy.Subscriber('mgs_marker', MGSMarker, self.marker_callback)
     self.segment_pub = rospy.Publisher('path_segments', PathSegment, queue_size=10)
+    # parameters
+    self.step_size = rospy.get_param('~step_size', 0.05)
     # data about path
     self.current_segment = []
     self.current_segment_lock = threading.Lock()
-    self.marker_prev = ''
+    self.marker_prev = MGSMarker()
+    self.marker_prev.type = MGSMarker.NONE
     # transformation to most recent marker location
     self.R = np.eye(2)
     self.t = np.zeros((2,1))
@@ -87,10 +90,17 @@ class LineMapper:
     pts = np.delete(pts, idx, axis=1)
     spl = CubicSpline(s, pts, axis=1)
 
+    # Interpolate by a fixed distance to limit size of message
+    n_steps = np.ceil(s[-1] / self.step_size)
+    s = np.linspace(0, s[-1], n_steps)
+    pts = spl(s)
+    print(s)
+    print(pts)
+
     # Publish segment data
     p = PathSegment()
     p.marker_start = self.marker_prev
-    p.marker_end = msg.data
+    p.marker_end = msg
     p.breakpoints = spl.x
     p.coefficients.layout.dim.append(MultiArrayDimension("dimension",  spl.c.shape[0], pts.size))
     p.coefficients.layout.dim.append(MultiArrayDimension("point",      spl.c.shape[1], spl.c.shape[1]*spl.c.shape[2]))
@@ -98,7 +108,7 @@ class LineMapper:
     p.coefficients.data = spl.c.flatten()
     self.segment_pub.publish(p)
 
-    self.marker_prev = msg.data
+    self.marker_prev = p.marker_end
     
     # plt.plot(pts[0,:], pts[1,:], 'ro', ms=5)
     # plt.plot(spl(s)[0,:], spl(s)[1,:], 'b', lw=3)

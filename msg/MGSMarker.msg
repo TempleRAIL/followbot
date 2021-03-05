@@ -1,7 +1,8 @@
+uint8 NONE=255
 uint8 STOP=0
 uint8 START=1
 uint8 FOLLOW_LEFT=2
 uint8 FOLLOW_RIGHT=3
 uint8 FLIP_POLARITY=4
 
-int32 command
+int32 type

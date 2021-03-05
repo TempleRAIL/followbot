@@ -4,12 +4,12 @@ import threading
 
 import rospy
 from geometry_msgs.msg import Twist
-from followbot.msg import MGSMeasurements, MGSMeasurement, MGSCommand
+from followbot.msg import MGSMeasurements, MGSMeasurement, MGSMarker
 
 class Follower:
   def __init__(self):
     self.measurement_sub = rospy.Subscriber('mgs', MGSMeasurements, self.mgs_callback)
-    self.mgs_command_sub = rospy.Subscriber('mgs_command', MGSCommand, self.command_callback)
+    self.mgs_marker_sub = rospy.Subscriber('mgs_marker', MGSMarker, self.marker_callback)
     self.cmd_vel_pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, queue_size=1)
     self.twist = Twist()
     self.twist_lock = threading.Lock()
@@ -17,12 +17,12 @@ class Follower:
     self.v = rospy.get_param('~v', 0.2) # nominal velocity
   
 
-  def command_callback(self, msg):
+  def marker_callback(self, msg):
     self.twist_lock.acquire()
     try:
-      if msg.command == MGSCommand.STOP:
+      if msg.type == MGSMarker.STOP:
         self.twist.linear.x = 0.
-      elif msg.command == MGSCommand.START:
+      elif msg.type == MGSMarker.START:
         self.twist.linear.x = self.v
     finally:
       self.twist_lock.release()
@@ -44,6 +44,7 @@ class Follower:
     finally:
       self.twist_lock.release()
     # END CONTROL
+
 
 if __name__ == '__main__':
   rospy.init_node('follower_controller')

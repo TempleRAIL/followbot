@@ -8,7 +8,7 @@ from sensor_msgs.msg import Image, PointCloud2
 import message_filters 
 from sensor_msgs import point_cloud2
 from nav_msgs.msg import Odometry
-from followbot.msg import MGSMeasurement, MGSMeasurements, MGSCommand
+from followbot.msg import MGSMeasurement, MGSMeasurements, MGSMarker
 
 class Detector:
   def __init__(self):
@@ -19,17 +19,17 @@ class Detector:
     self.odom_sub = message_filters.Subscriber('odom', Odometry)   
     self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub, self.pcl_sub, self.odom_sub], queue_size=5, slop=0.1)
     self.measurements.registerCallback(self.measurement_callback)
-    self.command_sub = rospy.Subscriber('mgs_command', MGSCommand, self.mgs_command_callback)
+    self.marker_sub = rospy.Subscriber('mgs_marker', MGSMarker, self.mgs_marker_callback)
     self.measurements_pub = rospy.Publisher('mgs', MGSMeasurements, queue_size=10)
     self.detection_img_pub = rospy.Publisher('detection_image', Image, queue_size=10)
     self.track_width = rospy.get_param('~track_width', 0.083) # 0.08216275
     self.follow_left = False
   
 
-  def mgs_command_callback(self, msg):
-    if msg.command == MGSCommand.FOLLOW_LEFT:
+  def mgs_marker_callback(self, msg):
+    if msg.type == MGSMarker.FOLLOW_LEFT:
       self.follow_left = True
-    elif msg.command == MGSCommand.FOLLOW_RIGHT:
+    elif msg.type == MGSMarker.FOLLOW_RIGHT:
       self.follow_left = False
     
 
@@ -74,9 +74,9 @@ class Detector:
       m_track.type = MGSMeasurement.TRACK
       # get point
       if self.follow_left:
-        m_track.position = -np.asscalar(cloud_pts[inds[0],0] + self.track_width / 2.) - 0.0125
-      else:
         m_track.position = -np.asscalar(cloud_pts[inds[-1],0] - self.track_width / 2.) - 0.0125
+      else:
+        m_track.position = -np.asscalar(cloud_pts[inds[0],0] + self.track_width / 2.) - 0.0125
       detections_msg.measurements.append(m_track)
       # draw point:
       if self.detection_img_pub.get_num_connections() > 0:

@@ -1,14 +1,14 @@
 marker_types:
-  - command: follow_left
+  - type: follow_left
     layout: [1, 0]
     
-  - command: follow_right
+  - type: follow_right
     layout: [0, 1]
   
-  - command: stop 
+  - type: stop 
     layout: [1, 1]
   
-  - command: flip_polarity # used at the end of a loop
+  - type: flip_polarity # used at the end of a loop
     layout: [1, 1,
              0, 1,
              1, 1]

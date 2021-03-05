@@ -7,7 +7,7 @@ import numpy as np
 import rospy
 import rosparam
 from std_msgs.msg import String
-from followbot.msg import MGSMeasurement, MGSMeasurements, MGSCommand
+from followbot.msg import MGSMeasurement, MGSMeasurements, MGSMarker
 
 
 class Identifier:
@@ -15,7 +15,7 @@ class Identifier:
   def __init__(self):
     # ros
     self.mgs_sub = rospy.Subscriber('mgs', MGSMeasurements, self.mgs_callback)
-    self.command_pub = rospy.Publisher('mgs_command', MGSCommand, queue_size=10)
+    self.marker_pub = rospy.Publisher('mgs_marker', MGSMarker, queue_size=10)
     if rospy.has_param('~filename'):
       filename = rospy.get_param('~filename')
       self.marker_types = rosparam.load_file(filename)
@@ -57,19 +57,19 @@ class Identifier:
     for mt in self.marker_types:
       if self._check_list_equality(mt['layout'], marker_layout):
         found = True
-        rospy.loginfo('Found marker: {}'.format(mt['command']))
-        c = MGSCommand()
-        if mt['command'] == 'follow_left':
-          c.command = MGSCommand.FOLLOW_LEFT
-        elif mt['command'] == 'follow_right':
-          c.command = MGSCommand.FOLLOW_LEFT
-        elif mt['command'] == 'stop':
-          c.command = MGSCommand.STOP
-        elif mt['command'] == 'flip_polarity':
-          c.command = MGSCommand.FLIP_POLARITY
+        rospy.loginfo('Found marker: {}'.format(mt['type']))
+        c = MGSMarker()
+        if mt['type'] == 'follow_left':
+          c.type = MGSMarker.FOLLOW_LEFT
+        elif mt['type'] == 'follow_right':
+          c.type = MGSMarker.FOLLOW_LEFT
+        elif mt['type'] == 'stop':
+          c.type = MGSMarker.STOP
+        elif mt['type'] == 'flip_polarity':
+          c.type = MGSMarker.FLIP_POLARITY
         else:
-          rospy.logwarn('Command not defined')
-        self.command_pub.publish(c)
+          rospy.logwarn('Type not defined')
+        self.marker_pub.publish(c)
         break
     if marker_layout and not found:
       rospy.logwarn('Marker layout not defined: {}'.format(marker_layout))

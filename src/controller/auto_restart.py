@@ -1,29 +1,29 @@
 #!/usr/bin/env python
 # BEGIN ALL
 import rospy
-from followbot.msg import MGSCommand
+from followbot.msg import MGSMarker
 
 
 class AutoRestart:
 
   def __init__(self):
     # ros
-    self.command_sub = rospy.Subscriber('mgs_command', MGSCommand, self.callback)
-    self.command_pub = rospy.Publisher('mgs_command', MGSCommand, queue_size=10)
+    self.marker_sub = rospy.Subscriber('mgs_marker', MGSMarker, self.callback)
+    self.marker_pub = rospy.Publisher('mgs_marker', MGSMarker, queue_size=10)
     self.delay = rospy.get_param('~delay', 2.0)
     self.start_timer()
 
 
   def callback(self, msg):
-    if msg.command == MGSCommand.STOP:
+    if msg.type == MGSMarker.STOP:
       self.start_timer()
 
 
   def timer_callback(self, event):
     rospy.loginfo('Starting robot')
-    c = MGSCommand()
-    c.command = MGSCommand.START
-    self.command_pub.publish(c)
+    c = MGSMarker()
+    c.type = MGSMarker.START
+    self.marker_pub.publish(c)
   
 
   def start_timer(self):

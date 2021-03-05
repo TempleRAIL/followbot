@@ -29,7 +29,7 @@ catkin_python_setup()
 add_message_files(
   DIRECTORY msg
   FILES
-  MGSCommand.msg
+  MGSMarker.msg
   MGSMeasurement.msg
   MGSMeasurements.msg
   PathSegment.msg
