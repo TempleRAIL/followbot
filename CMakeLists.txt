@@ -14,10 +14,10 @@ set(MESSAGE_DEPENDENCIES
 )
 
 find_package(catkin REQUIRED COMPONENTS
-   roscpp
-   rospy
-   message_generation
-   ${MESSAGE_DEPENDENCIES}
+  roscpp
+  rospy
+  message_generation
+  ${MESSAGE_DEPENDENCIES}
 )
 
 catkin_python_setup()
@@ -61,6 +61,7 @@ catkin_install_python(PROGRAMS
   src/calibration/follower_line_finder.py
   src/calibration/follower_opencv.py
   src/calibration/hsv_color_finder.py
+  src/controller/auto_restart.py
   src/controller/follower_p_controller.py
   src/detector/follower_detector.py
   src/detector/marker_identifier.py
@@ -72,4 +73,3 @@ catkin_install_python(PROGRAMS
 install(DIRECTORY config images launch meshes robots urdf world
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
-

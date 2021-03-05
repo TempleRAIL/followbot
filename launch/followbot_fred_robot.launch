@@ -41,6 +41,8 @@
   <node pkg="followbot" type="line_mapper.py" name="line_mapper" output="screen" required="true">
     <param name="num_points_curvature" value="50"/>
   </node>
+
+  <node pkg="followbot" type="auto_restart.py" name="auto_restart" output="screen"/>
   
   <!-- Rosbag record -->
   <node pkg="rosbag" type="record" name="rosbag"
