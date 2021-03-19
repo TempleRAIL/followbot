@@ -3,14 +3,14 @@ A gazebo simulation platform where the automated guided vehicle (AGV) follows th
 ## warehouse: 
 1. fred robot:
 
-![avg_warehouse](https://github.com/TempleRAIL/followbot/blob/master/images/avg_warehouse_fred_robot.png)
+![avg_warehouse](https://github.com/TempleRAIL/followbot/blob/main/images/avg_warehouse_fred_robot.png)
 
 2. turtlebot:
 
-![avg_warehouse](https://github.com/TempleRAIL/followbot/blob/master/images/avg_warehouse.png)
+![avg_warehouse](https://github.com/TempleRAIL/followbot/blob/main/images/avg_warehouse.png)
 
 ## tape detection:
-![tape_detection](https://github.com/TempleRAIL/followbot/blob/master/images/tape_detection.png)
+![tape_detection](https://github.com/TempleRAIL/followbot/blob/main/images/tape_detection.png)
 
 # Usage
 ## install: 
