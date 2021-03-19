@@ -20,6 +20,7 @@ In order to install necessary requirements, run:
 sudo apt-get install ros-kinetic-turtlebot
 sudo apt-get install ros-kinetic-turtlebot-simulator
 sudo apt-get install ros-kinetic-kobuki*
+sudo apt-get install ros-kinetic-ros-numpy
 cd ~/catkin_ws/src
 git clone https://github.com/TempleRAIL/followbot.git
 cd ..
