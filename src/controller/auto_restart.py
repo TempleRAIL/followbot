@@ -10,7 +10,7 @@ class AutoRestart:
     # ros
     self.command_sub = rospy.Subscriber('mgs_command', MGSCommand, self.callback)
     self.command_pub = rospy.Publisher('mgs_command', MGSCommand, queue_size=10)
-    self.delay = rospy.get_param('~delay', 2.0)
+    self.delay = rospy.get_param('~delay', 2)
     self.start_timer()
 
 
