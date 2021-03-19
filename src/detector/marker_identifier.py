@@ -62,7 +62,7 @@ class Identifier:
         if mt['command'] == 'follow_left':
           c.command = MGSCommand.FOLLOW_LEFT
         elif mt['command'] == 'follow_right':
-          c.command = MGSCommand.FOLLOW_LEFT
+          c.command = MGSCommand.FOLLOW_RIGHT
         elif mt['command'] == 'stop':
           c.command = MGSCommand.STOP
         elif mt['command'] == 'flip_polarity':
