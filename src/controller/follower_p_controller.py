@@ -14,16 +14,30 @@ class Follower:
     self.twist = Twist()
     self.twist_lock = threading.Lock()
     self.p = rospy.get_param('~p', 7.0) # proportional controller constant
-    self.v = rospy.get_param('~v', 0.2) # nominal velocity
+    self.v1 = rospy.get_param('~v', 0.666) # nominal velocity (1.49 MPH)
+    self.v2 = rospy.get_param('~v', 0.782) # nominal velocity (1.75 MPH)
+    self.v3 = rospy.get_param('~v', 0.849) # nominal velocity (1.90 MPH)
+    self.v4 = rospy.get_param('~v', 0.939) # nominal velocity (2.10 MPH)
+    self.v_turn = rospy.get_param('~v', 0.425) # nominal velocity (0.95 MPH)
+    self.v_laser = rospy.get_param('~v', 0.308) # nominal velocity (0.69 MPH)
+    self.v_stop = rospy.get_param('~v', 0.125) # nominal velocity (0.28 MPH)
   
 
   def marker_callback(self, msg):
     self.twist_lock.acquire()
     try:
-      if msg.type == MGSMarker.STOP:
+      if msg.command == MGSMarker.STOP:
         self.twist.linear.x = 0.
-      elif msg.type == MGSMarker.START:
-        self.twist.linear.x = self.v
+      elif msg.command == MGSMarker.START:
+        self.twist.linear.x = self.v1
+      elif msg.command == MGSMarker.SPEED_1:
+        self.twist.linear.x = self.v1
+      elif msg.command == MGSMarker.SPEED_2:
+        self.twist.linear.x = self.v2
+      elif msg.command == MGSMarker.SPEED_3:
+        self.twist.linear.x = self.v3
+      elif msg.command == MGSMarker.SPEED_4:
+        self.twist.linear.x = self.v4
     finally:
       self.twist_lock.release()
 

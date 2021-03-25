@@ -15,14 +15,14 @@ class AutoRestart:
 
 
   def callback(self, msg):
-    if msg.type == MGSMarker.STOP:
+    if msg.command == MGSMarker.STOP:
       self.start_timer()
 
 
   def timer_callback(self, event):
     rospy.loginfo('Starting robot')
     c = MGSMarker()
-    c.type = MGSMarker.START
+    c.command = MGSMarker.START
     self.marker_pub.publish(c)
   
 
