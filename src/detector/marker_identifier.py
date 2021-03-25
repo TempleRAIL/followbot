@@ -6,7 +6,8 @@ import numpy as np
 
 import rospy
 import rosparam
-from std_msgs.msg import String
+from sensor_msgs.msg import BatteryState
+from std_msgs.msg import Int8
 from followbot.msg import MGSMeasurement, MGSMeasurements, MGSMarker
 
 
@@ -15,6 +16,8 @@ class Identifier:
   def __init__(self):
     # ros
     self.mgs_sub = rospy.Subscriber('mgs', MGSMeasurements, self.mgs_callback)
+    self.battery_sub = rospy.Subscriber('battery', BatteryState, self.battery_callback)
+    self.multi_send_sub = rospy.Subscriber('multi_send', Int8, self.multi_send_callback)
     self.marker_pub = rospy.Publisher('mgs_marker', MGSMarker, queue_size=10)
     if rospy.has_param('~filename'):
       filename = rospy.get_param('~filename')
@@ -25,6 +28,9 @@ class Identifier:
       sys.exit(1)
     self.history = []
     self.min_count = rospy.get_param('~min_count', 50)
+    self.battery_state = BatteryState()
+    self.battery_state.percentage = 1.0
+    self.multi_send_val = -1
 
 
   def mgs_callback(self, msg):
@@ -36,6 +42,14 @@ class Identifier:
       # compute marker type if no marker present and have a history
       if len(self.history) > 0:
         self._compute_marker_type()
+  
+
+  def battery_callback(self, msg):
+    self.battery_state = msg
+  
+
+  def multi_send_callback(self, msg):
+    self.multi_send_val = msg.data
     
 
   def _compute_marker_type(self):
@@ -57,62 +71,147 @@ class Identifier:
     for mt in self.marker_types:
       if self._check_list_equality(mt['layout'], marker_layout):
         found = True
-        rospy.loginfo('Found marker: {}'.format(mt['command']))
-        c = MGSCommand()
+        rospy.loginfo('Found marker: {}'.format(mt['type']))
+        c = MGSMarker()
         # Basic Markers
-        if mt['command'] == 'bear_left':
-          c.command = MGSCommand.BEAR_LEFT
-        elif mt['command'] == 'bear_right':
-          c.command = MGSCommand.BEAR_RIGHT
-        elif mt['command'] == 'stop':
-          c.command = MGSCommand.STOP
+        if mt['type'] == 'bear_left':
+          c.type = MGSMarker.BEAR_LEFT
+          if not self.multi_send_val == -1:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'bear_right':
+          c.type = MGSMarker.BEAR_RIGHT
+          if not self.multi_send_val == -1:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'stop':
+          c.type = MGSMarker.STOP
+          c.command = MGSMarker.STOP
         # Speed Hyper Markers
-        elif mt['command'] == 'speed_1':
-          c.command = MGSCommand.SPEED_1
-        elif mt['command'] == 'speed_2':
-          c.command = MGSCommand.speed_2
-        elif mt['command'] == 'speed_3':
-          c.command = MGSCommand.speed_3
-        elif mt['command'] == 'speed_4':
-          c.command = MGSCommand.speed_4
+        elif mt['type'] == 'speed_1':
+          c.type = MGSMarker.SPEED_1
+          c.command = MGSMarker.SPEED_1
+        elif mt['type'] == 'speed_2':
+          c.type = MGSMarker.speed_2
+          c.command = MGSMarker.speed_2
+        elif mt['type'] == 'speed_3':
+          c.type = MGSMarker.speed_3
+          c.command = MGSMarker.speed_3
+        elif mt['type'] == 'speed_4':
+          c.type = MGSMarker.speed_4
+          c.command = MGSMarker.speed_4
         # Battery Charge Hyper Markers
-        elif mt['command'] == 'battery_charge_left':
-          c.command = MGSCommand.BATTERY_CHARGE_LEFT
-        elif mt['command'] == 'battery_charge_right':
-          c.command = MGSCommand.BATTERY_CHARGE_RIGHT
+        elif mt['type'] == 'battery_charge_left':
+          c.type = MGSMarker.BATTERY_CHARGE_LEFT
+          if self.battery_state.percentage > 0.3:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'battery_charge_right':
+          c.type = MGSMarker.BATTERY_CHARGE_RIGHT
+          if self.battery_state.percentage > 0.3:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
         # Multi Send Markers
-        elif mt['command'] == 'multi_send_1_left':
-          c.command = MGSCommand.MULTI_SEND_1_LEFT
-        elif mt['command'] == 'multi_send_2_left':
-          c.command = MGSCommand.MULTI_SEND_2_LEFT
-        elif mt['command'] == 'multi_send_3_left':
-          c.command = MGSCommand.MULTI_SEND_3_LEFT
-        elif mt['command'] == 'multi_send_4_left':
-          c.command = MGSCommand.MULTI_SEND_4_LEFT
-        elif mt['command'] == 'multi_send_5_left':
-          c.command = MGSCommand.MULTI_SEND_5_LEFT
-        elif mt['command'] == 'multi_send_6_left':
-          c.command = MGSCommand.MULTI_SEND_6_LEFT
-        elif mt['command'] == 'multi_send_7_left':
-          c.command = MGSCommand.MULTI_SEND_7_LEFT
-        elif mt['command'] == 'multi_send_8_left':
-          c.command = MGSCommand.MULTI_SEND_8_LEFT
-        elif mt['command'] == 'multi_send_1_right':
-          c.command = MGSCommand.MULTI_SEND_1_RIGHT
-        elif mt['command'] == 'multi_send_2_right':
-          c.command = MGSCommand.MULTI_SEND_2_RIGHT
-        elif mt['command'] == 'multi_send_3_right':
-          c.command = MGSCommand.MULTI_SEND_3_RIGHT
-        elif mt['command'] == 'multi_send_4_right':
-          c.command = MGSCommand.MULTI_SEND_4_RIGHT
-        elif mt['command'] == 'multi_send_5_right':
-          c.command = MGSCommand.MULTI_SEND_5_RIGHT
-        elif mt['command'] == 'multi_send_6_right':
-          c.command = MGSCommand.MULTI_SEND_6_RIGHT
-        elif mt['command'] == 'multi_send_7_right':
-          c.command = MGSCommand.MULTI_SEND_7_RIGHT
-        elif mt['command'] == 'multi_send_8_right':
-          c.command = MGSCommand.MULTI_SEND_8_RIGHT
+        elif mt['type'] == 'multi_send_1_left':
+          c.type = MGSMarker.MULTI_SEND_1_LEFT
+          if self.multi_send_val == 1:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'multi_send_2_left':
+          c.type = MGSMarker.MULTI_SEND_2_LEFT
+          if self.multi_send_val == 2:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'multi_send_3_left':
+          c.type = MGSMarker.MULTI_SEND_3_LEFT
+          if self.multi_send_val == 3:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'multi_send_4_left':
+          c.type = MGSMarker.MULTI_SEND_4_LEFT
+          if self.multi_send_val == 4:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'multi_send_5_left':
+          c.type = MGSMarker.MULTI_SEND_5_LEFT
+          if self.multi_send_val == 5:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'multi_send_6_left':
+          c.type = MGSMarker.MULTI_SEND_6_LEFT
+          if self.multi_send_val == 6:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'multi_send_7_left':
+          c.type = MGSMarker.MULTI_SEND_7_LEFT
+          if self.multi_send_val == 7:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'multi_send_8_left':
+          c.type = MGSMarker.MULTI_SEND_8_LEFT
+          if self.multi_send_val == 8:
+            c.command = MGSMarker.BEAR_LEFT
+          else:
+            c.command = MGSMarker.BEAR_RIGHT
+        elif mt['type'] == 'multi_send_1_right':
+          c.type = MGSMarker.MULTI_SEND_1_RIGHT
+          if self.multi_send_val == 1:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'multi_send_2_right':
+          c.type = MGSMarker.MULTI_SEND_2_RIGHT
+          if self.multi_send_val == 2:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'multi_send_3_right':
+          c.type = MGSMarker.MULTI_SEND_3_RIGHT
+          if self.multi_send_val == 3:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'multi_send_4_right':
+          c.type = MGSMarker.MULTI_SEND_4_RIGHT
+          if self.multi_send_val == 4:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'multi_send_5_right':
+          c.type = MGSMarker.MULTI_SEND_5_RIGHT
+          if self.multi_send_val == 5:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'multi_send_6_right':
+          c.type = MGSMarker.MULTI_SEND_6_RIGHT
+          if self.multi_send_val == 6:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'multi_send_7_right':
+          c.type = MGSMarker.MULTI_SEND_7_RIGHT
+          if self.multi_send_val == 7:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
+        elif mt['type'] == 'multi_send_8_right':
+          c.type = MGSMarker.MULTI_SEND_8_RIGHT
+          if self.multi_send_val == 8:
+            c.command = MGSMarker.BEAR_RIGHT
+          else:
+            c.command = MGSMarker.BEAR_LEFT
         else:
           rospy.logwarn('Type not defined')
         self.marker_pub.publish(c)

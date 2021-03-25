@@ -27,9 +27,9 @@ class Detector:
   
 
   def mgs_marker_callback(self, msg):
-    if msg.type == MGSMarker.BEAR_LEFT:
+    if msg.command == MGSMarker.BEAR_LEFT:
       self.bear_left = True
-    elif msg.type == MGSMarker.BEAR_RIGHT:
+    elif msg.command == MGSMarker.BEAR_RIGHT:
       self.bear_left = False
     
 

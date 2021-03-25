@@ -32,4 +32,5 @@ uint8 FLIP_POLARITY=100
 uint8 START=200
 uint8 NONE=255
 
-int32 type
+int32 type # type of marker listed above
+int32 command # command to follow, from Basic Markers and Speed Hyper Markers, depending on current robot state
