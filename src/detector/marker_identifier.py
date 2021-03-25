@@ -59,14 +59,60 @@ class Identifier:
         found = True
         rospy.loginfo('Found marker: {}'.format(mt['command']))
         c = MGSCommand()
-        if mt['command'] == 'follow_left':
-          c.command = MGSCommand.FOLLOW_LEFT
-        elif mt['command'] == 'follow_right':
-          c.command = MGSCommand.FOLLOW_RIGHT
+        # Basic Markers
+        if mt['command'] == 'bear_left':
+          c.command = MGSCommand.BEAR_LEFT
+        elif mt['command'] == 'bear_right':
+          c.command = MGSCommand.BEAR_RIGHT
         elif mt['command'] == 'stop':
           c.command = MGSCommand.STOP
-        elif mt['command'] == 'flip_polarity':
-          c.command = MGSCommand.FLIP_POLARITY
+        # Speed Hyper Markers
+        elif mt['command'] == 'speed_1':
+          c.command = MGSCommand.SPEED_1
+        elif mt['command'] == 'speed_2':
+          c.command = MGSCommand.speed_2
+        elif mt['command'] == 'speed_3':
+          c.command = MGSCommand.speed_3
+        elif mt['command'] == 'speed_4':
+          c.command = MGSCommand.speed_4
+        # Battery Charge Hyper Markers
+        elif mt['command'] == 'battery_charge_left':
+          c.command = MGSCommand.BATTERY_CHARGE_LEFT
+        elif mt['command'] == 'battery_charge_right':
+          c.command = MGSCommand.BATTERY_CHARGE_RIGHT
+        # Multi Send Markers
+        elif mt['command'] == 'multi_send_1_left':
+          c.command = MGSCommand.MULTI_SEND_1_LEFT
+        elif mt['command'] == 'multi_send_2_left':
+          c.command = MGSCommand.MULTI_SEND_2_LEFT
+        elif mt['command'] == 'multi_send_3_left':
+          c.command = MGSCommand.MULTI_SEND_3_LEFT
+        elif mt['command'] == 'multi_send_4_left':
+          c.command = MGSCommand.MULTI_SEND_4_LEFT
+        elif mt['command'] == 'multi_send_5_left':
+          c.command = MGSCommand.MULTI_SEND_5_LEFT
+        elif mt['command'] == 'multi_send_6_left':
+          c.command = MGSCommand.MULTI_SEND_6_LEFT
+        elif mt['command'] == 'multi_send_7_left':
+          c.command = MGSCommand.MULTI_SEND_7_LEFT
+        elif mt['command'] == 'multi_send_8_left':
+          c.command = MGSCommand.MULTI_SEND_8_LEFT
+        elif mt['command'] == 'multi_send_1_right':
+          c.command = MGSCommand.MULTI_SEND_1_RIGHT
+        elif mt['command'] == 'multi_send_2_right':
+          c.command = MGSCommand.MULTI_SEND_2_RIGHT
+        elif mt['command'] == 'multi_send_3_right':
+          c.command = MGSCommand.MULTI_SEND_3_RIGHT
+        elif mt['command'] == 'multi_send_4_right':
+          c.command = MGSCommand.MULTI_SEND_4_RIGHT
+        elif mt['command'] == 'multi_send_5_right':
+          c.command = MGSCommand.MULTI_SEND_5_RIGHT
+        elif mt['command'] == 'multi_send_6_right':
+          c.command = MGSCommand.MULTI_SEND_6_RIGHT
+        elif mt['command'] == 'multi_send_7_right':
+          c.command = MGSCommand.MULTI_SEND_7_RIGHT
+        elif mt['command'] == 'multi_send_8_right':
+          c.command = MGSCommand.MULTI_SEND_8_RIGHT
         else:
           rospy.logwarn('Type not defined')
         self.marker_pub.publish(c)

@@ -1,14 +1,304 @@
 marker_types:
-  - type: follow_left
+  # Basic Markers
+  - type: bear_left
+    min_length: 12
     layout: [1, 0]
     
-  - type: follow_right
+  - type: bear_right
+    min_length: 12
     layout: [0, 1]
   
-  - type: stop 
+  - type: stop
+    min_length: 12
     layout: [1, 1]
   
+  # Speed Hyper Markers
+  - type: speed_2
+    min_length: 3
+    layout: [0, 1,
+             0, 0,
+             0, 1]
+  
+  - type: speed_3
+    min_length: 3
+    layout: [0, 1,
+             0, 0,
+             0, 1,
+             0, 0,
+             0, 1]
+  
+  - type: speed_4
+    min_length: 3
+    layout: [0, 1,
+             0, 0,
+             0, 1,
+             0, 0,
+             0, 1,
+             0, 0,
+             0, 1]
+  
+  - type: speed_1
+    min_length: 3
+    layout: [1, 0,
+             0, 0,
+             1, 0]
+  
+  - type: speed_1
+    min_length: 3
+    layout: [1, 0,
+             0, 0,
+             1, 0,
+             0, 0,
+             1, 0]
+  
+  - type: speed_1
+    min_length: 3
+    layout: [1, 0,
+             0, 0,
+             1, 0,
+             0, 0,
+             1, 0,
+             0, 0,
+             1, 0]
+  
+  # Battery Charge Hyper Markers
+  - type: battery_charge_left
+    min_length: 3
+    layout: [1, 0,
+             0, 0,
+             0, 1,
+             0, 0,
+             1, 0,
+             0, 0,
+             0, 1,
+             0, 0,
+             1, 0]
+  
+  - type: battery_charge_right
+    min_length: 3
+    layout: [0, 1,
+             0, 0,
+             1, 0,
+             0, 0,
+             0, 1,
+             0, 0,
+             1, 0,
+             0, 0,
+             0, 1]
+  
+  # Multi Send Markers
+  - type: multi_send_1_left
+    min_length: 3
+    layout: [1, 0,
+             1, 1,
+             1, 0]
+  
+  - type: multi_send_2_left
+    min_length: 3
+    layout: [1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0]
+  
+  - type: multi_send_3_left
+    min_length: 3
+    min_length: 3
+    layout: [1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0]
+  
+  - type: multi_send_4_left
+    min_length: 3
+    layout: [1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0]
+  
+  - type: multi_send_5_left
+    min_length: 3
+    layout: [1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0]
+  
+  - type: multi_send_6_left
+    min_length: 3
+    layout: [1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0]
+  
+  - type: multi_send_7_left
+    min_length: 3
+    layout: [1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0]
+  
+  - type: multi_send_8_left
+    min_length: 3
+    layout: [1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0,
+             1, 1,
+             1, 0]
+  
+  - type: multi_send_1_right
+    min_length: 3
+    layout: [0, 1,
+             1, 1,
+             0, 1]
+  
+  - type: multi_send_2_right
+    min_length: 3
+    layout: [0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1]
+  
+  - type: multi_send_3_right
+    min_length: 3
+    layout: [0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1]
+  
+  - type: multi_send_4_right
+    min_length: 3
+    layout: [0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1]
+  
+  - type: multi_send_5_right
+    min_length: 3
+    layout: [0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1]
+  
+  - type: multi_send_6_right
+    min_length: 3
+    layout: [0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1]
+  
+  - type: multi_send_7_right
+    min_length: 3
+    layout: [0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1]
+  
+  - type: multi_send_8_right
+    min_length: 3
+    layout: [0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1,
+             1, 1,
+             0, 1]
+  
+  # Other
   - type: flip_polarity # used at the end of a loop
+    min_length: 3
     layout: [1, 1,
              0, 1,
              1, 1]

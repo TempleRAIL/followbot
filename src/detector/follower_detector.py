@@ -23,14 +23,14 @@ class Detector:
     self.measurements_pub = rospy.Publisher('mgs', MGSMeasurements, queue_size=10)
     self.detection_img_pub = rospy.Publisher('detection_image', Image, queue_size=10)
     self.track_width = rospy.get_param('~track_width', 0.104) # 0.10391598 
-    self.follow_left = False
+    self.bear_left = False
   
 
   def mgs_marker_callback(self, msg):
-    if msg.type == MGSMarker.FOLLOW_LEFT:
-      self.follow_left = True
-    elif msg.type == MGSMarker.FOLLOW_RIGHT:
-      self.follow_left = False
+    if msg.type == MGSMarker.BEAR_LEFT:
+      self.bear_left = True
+    elif msg.type == MGSMarker.BEAR_RIGHT:
+      self.bear_left = False
     
 
   def measurement_callback(self, img_msg, pcl_msg, odom_msg):
@@ -73,7 +73,7 @@ class Detector:
       m_track = MGSMeasurement()
       m_track.type = MGSMeasurement.TRACK
       # get point
-      if self.follow_left:
+      if self.bear_left:
         m_track.position = -np.asscalar(cloud_pts[inds[-1],0] - self.track_width / 2.) - 0.0125
       else:
         m_track.position = -np.asscalar(cloud_pts[inds[0],0] + self.track_width / 2.) - 0.0125
