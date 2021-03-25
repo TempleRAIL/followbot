@@ -22,7 +22,7 @@ class Detector:
     self.marker_sub = rospy.Subscriber('mgs_marker', MGSMarker, self.mgs_marker_callback)
     self.measurements_pub = rospy.Publisher('mgs', MGSMeasurements, queue_size=10)
     self.detection_img_pub = rospy.Publisher('detection_image', Image, queue_size=10)
-    self.track_width = rospy.get_param('~track_width', 0.083) # 0.08216275
+    self.track_width = rospy.get_param('~track_width', 0.104) # 0.10391598 
     self.follow_left = False
   
 
@@ -93,7 +93,7 @@ class Detector:
       m_marker.type = MGSMeasurement.MARKER
       # get point
       ind = int(np.median(inds))
-      m_marker.position = -np.asscalar(cloud_pts[ind,0] + self.track_width / 2.) - 0.0125
+      m_marker.position = -np.asscalar(cloud_pts[ind,0] - self.track_width / 2.) - 0.0125
       detections_msg.measurements.append(m_marker)
       # draw point:
       if self.detection_img_pub.get_num_connections() > 0:

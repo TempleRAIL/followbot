@@ -29,5 +29,6 @@ then
 fi
 
 sudo apt install ros-melodic-yocs-cmd-vel-mux \
-    ros-melodic-joy
+    ros-melodic-joy \
+    ros-melodic-ros-numpy
 

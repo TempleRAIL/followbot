@@ -57,16 +57,16 @@ class Identifier:
     for mt in self.marker_types:
       if self._check_list_equality(mt['layout'], marker_layout):
         found = True
-        rospy.loginfo('Found marker: {}'.format(mt['type']))
-        c = MGSMarker()
-        if mt['type'] == 'follow_left':
-          c.type = MGSMarker.FOLLOW_LEFT
-        elif mt['type'] == 'follow_right':
-          c.type = MGSMarker.FOLLOW_LEFT
-        elif mt['type'] == 'stop':
-          c.type = MGSMarker.STOP
-        elif mt['type'] == 'flip_polarity':
-          c.type = MGSMarker.FLIP_POLARITY
+        rospy.loginfo('Found marker: {}'.format(mt['command']))
+        c = MGSCommand()
+        if mt['command'] == 'follow_left':
+          c.command = MGSCommand.FOLLOW_LEFT
+        elif mt['command'] == 'follow_right':
+          c.command = MGSCommand.FOLLOW_RIGHT
+        elif mt['command'] == 'stop':
+          c.command = MGSCommand.STOP
+        elif mt['command'] == 'flip_polarity':
+          c.command = MGSCommand.FLIP_POLARITY
         else:
           rospy.logwarn('Type not defined')
         self.marker_pub.publish(c)
