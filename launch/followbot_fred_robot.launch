@@ -34,7 +34,7 @@
   <!-- Followbot marker identifier -->
   <node pkg="followbot" type="marker_identifier.py" name="marker_identifier" output="screen" required="true">
     <param name="filename" value="$(find followbot)/config/marker_types.yaml"/>
-    <param name="min_count" value="50"/>
+    <param name="min_count" value="10"/>
   </node>
   
   <!-- Followbot line mapper -->
