@@ -1,0 +1,53 @@
+<launch>
+  <!-- Arguments -->
+  <arg name="pose_initial_x" default="3"/>
+  <arg name="pose_initial_y" default="2.2"/>
+  <arg name="pose_initial_theta" default="0"/>
+  
+  <arg name="record" default="false"/>
+
+  <!-- Gazebo -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="use_sim_time" value="true"/>
+    <arg name="debug" value="false"/>
+    <arg name="world_name" value="$(find followbot)/world/agv_warehouse_20m.world"/>
+  </include>
+
+  <!-- Robot -->
+  <include file="$(find followbot)/launch/includes/fred/fred.launch.xml">
+    <arg name="base" value="fred"/>
+    <arg name="3d_sensor" value="kinect"/>
+    <arg name="initial_pose" value="-x $(arg pose_initial_x) -y $(arg pose_initial_y) -Y $(arg pose_initial_theta)"/>
+  </include>
+
+  <!-- TF state -->
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+    <param name="publish_frequency" type="double" value="30.0" />
+  </node>
+
+  <!-- Followbot detector -->
+  <node pkg="followbot" type="follower_detector.py" name="follower_detector" output="screen" required="true"/>
+  
+  <!-- Followbot P-controller -->
+  <node pkg="followbot" type="follower_p_controller.py" name="follower_p_controller" output="screen" required="true"/>
+
+  <!-- Followbot marker identifier -->
+  <node pkg="followbot" type="marker_identifier.py" name="marker_identifier" output="screen" required="true">
+    <param name="filename" value="$(find followbot)/config/marker_types.yaml"/>
+    <param name="min_count" value="10"/>
+  </node>
+  
+  <!-- Followbot line mapper -->
+  <node pkg="followbot" type="segment_mapper.py" name="segment_mapper" output="screen" required="true">
+    <param name="num_points_curvature" value="50"/>
+  </node>
+
+  <!-- Followbot auto restart -->
+  <node pkg="followbot" type="auto_restart.py" name="auto_restart" output="screen"/>
+  
+  <!-- Rosbag record -->
+  <node pkg="rosbag" type="record" name="rosbag"
+        args="-o $(env HOME)/followbot /clock /mgs /odom /tf /tf_static"
+        if="$(arg record)"/>
+
+</launch>
