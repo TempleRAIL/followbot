@@ -6,6 +6,7 @@ import rospy
 from geometry_msgs.msg import Twist
 from followbot.msg import MGSMeasurements, MGSMeasurement, MGSMarker
 from tf.transformations import euler_from_quaternion
+import math
 
 class Follower:
   def __init__(self):
@@ -26,6 +27,9 @@ class Follower:
     self.pose_history = []
     self.curve_flag = 0 # 0 for no curve, 1 for curve
     self.hypothesis_radius = self.scale_factor * 1
+    self.divergence_threshold = self.hypothesis_radius*(1-math.cos(float(np.pi/27.0)))
+    self.max_turning_omega = self.v_turn/self.hypothesis_radius
+    self.temp_turning_position = []
 
 
   def marker_callback(self, msg):
@@ -50,42 +54,42 @@ class Follower:
   def mgs_callback(self, msg):
     # get tape position
     pos = None
-    #pos_list = []
+    # pos_list = []
     if len(self.pose_history) >= 15:
       self.pose_history.pop(0)
       self.pose_history.append(msg)
     else:
       self.pose_history.append(msg)
-    if len(self.pose_history) > 1:
+    # if len(self.pose_history) > 1:
 
-      total_turning_time = self.pose_history[-1].header.stamp.secs - self.pose_history[0].header.stamp.secs + \
-        (self.pose_history[-1].header.stamp.nsecs - self.pose_history[0].header.stamp.nsecs)*0.000000001
-      theta_1 = euler_from_quaternion([self.pose_history[0].odometry.pose.pose.orientation.x,
-                                     self.pose_history[0].odometry.pose.pose.orientation.y,
-                                     self.pose_history[0].odometry.pose.pose.orientation.z,
-                                     self.pose_history[0].odometry.pose.pose.orientation.w])[2]
-
-      theta_2 = euler_from_quaternion([self.pose_history[-1].odometry.pose.pose.orientation.x,
-                                     self.pose_history[-1].odometry.pose.pose.orientation.y,
-                                     self.pose_history[-1].odometry.pose.pose.orientation.z,
-                                     self.pose_history[-1].odometry.pose.pose.orientation.w])[2]
-      expected_turning_angle = float(self.v_turn * total_turning_time/float(self.hypothesis_radius))
-      total_turning_angle = np.abs(theta_1-theta_2)
-
-      if total_turning_angle >= 0.8 * expected_turning_angle:
-        self.twist.linear.x = self.v_turn
-        self.curve_flag = 1
-
-      if total_turning_angle <= 0.4 * expected_turning_angle and self.curve_flag==1:
-        self.curve_flag = 0
-        self.twist.linear.x = self.v1
+      # total_turning_time = self.pose_history[-1].header.stamp.secs - self.pose_history[0].header.stamp.secs + \
+      #   (self.pose_history[-1].header.stamp.nsecs - self.pose_history[0].header.stamp.nsecs)*0.000000001
+      # theta_1 = euler_from_quaternion([self.pose_history[0].odometry.pose.pose.orientation.x,
+      #                                self.pose_history[0].odometry.pose.pose.orientation.y,
+      #                                self.pose_history[0].odometry.pose.pose.orientation.z,
+      #                                self.pose_history[0].odometry.pose.pose.orientation.w])[2]
+      #
+      # theta_2 = euler_from_quaternion([self.pose_history[-1].odometry.pose.pose.orientation.x,
+      #                                self.pose_history[-1].odometry.pose.pose.orientation.y,
+      #                                self.pose_history[-1].odometry.pose.pose.orientation.z,
+      #                                self.pose_history[-1].odometry.pose.pose.orientation.w])[2]
+      # expected_turning_angle = float(self.v_turn * total_turning_time/float(self.hypothesis_radius))
+      # total_turning_angle = np.abs(theta_1-theta_2)
+      #
+      # if total_turning_angle >= 0.8 * expected_turning_angle:
+      #   self.twist.linear.x = self.v_turn
+      #   self.curve_flag = 1
+      #
+      # if total_turning_angle <= 0.4 * expected_turning_angle and self.curve_flag==1:
+      #   self.curve_flag = 0
+      #   self.twist.linear.x = self.v1
       # print("total_turning_angle",total_turning_angle,"expected_turning_angle",expected_turning_angle,"v_x",self.twist.linear.x)
     pos_list = []
 
     for m in msg.measurements:
       if m.type == MGSMeasurement.TRACK:
         pos = m.position
-
+    print("pos",pos)
     '''
       pos_list.append(m.position)
     if(len(pos_list) != 0):
@@ -98,7 +102,30 @@ class Follower:
     try:
       if not pos is None:
         # self.twist.angular.z = -float(err) / 100 # turtlebot
+
         self.twist.angular.z = self.p * pos
+        if abs(self.twist.angular.z) >= self.max_turning_omega:
+          if self.twist.angular.z > 0:
+            self.twist.angular.z = self.max_turning_omega
+            self.twist.linear.x = self.v_turn
+            self.temp_turning_position = [self.pose_history[-1].odometry.pose.pose.orientation.x,self.pose_history[-1].odometry.pose.pose.orientation.y]
+          else:
+            self.twist.angular.z = -self.max_turning_omega
+            self.twist.linear.x = self.v_turn
+            self.temp_turning_position = [self.pose_history[-1].odometry.pose.pose.orientation.x,self.pose_history[-1].odometry.pose.pose.orientation.y]
+        else:
+          self.twist.angular.z = self.p * pos
+          if self.temp_turning_position:
+            if ((self.temp_turning_position[0] - self.pose_history[-1].odometry.pose.pose.orientation.x)**2+(self.temp_turning_position[0] - self.pose_history[-1].odometry.pose.pose.orientation.y))**2 > 0.5:
+              self.twist.linear.x = self.twist.linear.x
+              self.temp_turning_position = []
+            else:
+              self.twist.linear.x = self.v_turn
+
+
+
+
+
       self.cmd_vel_pub.publish(self.twist)
     finally:
       self.twist_lock.release()
