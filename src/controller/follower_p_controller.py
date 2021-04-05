@@ -64,7 +64,7 @@ class Follower:
     else:
       self.pose_history.append(msg)
     # print("self.pose_history[-1].odometry.pose.pose.orientation.x",self.pose_history[-1].odometry.pose.pose.position.x,"self.pose_history[-1].odometry.pose.pose.position.y",\
-          self.pose_history[-1].odometry.pose.pose.position.y)
+    #       self.pose_history[-1].odometry.pose.pose.position.y)
     # if len(self.pose_history) > 1:
 
       # total_turning_time = self.pose_history[-1].header.stamp.secs - self.pose_history[0].header.stamp.secs + \
