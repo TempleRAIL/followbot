@@ -28,28 +28,35 @@ class Follower:
     self.curve_flag = 0 # 0 for no curve, 1 for curve
     self.hypothesis_radius = self.scale_factor * 1
 
-    self.max_turning_omega = 1.5*self.v_turn/self.hypothesis_radius
-    self.upper_turning_threshold = 1*self.v_turn/self.hypothesis_radius
-    self.recover_turning_omega = 0.5 * self.v_turn/self.hypothesis_radius
-    self.turning_distance_threshold = 0.3
-    self.temp_turning_position = []
+    self.max_turning_omega = 1.5 * self.v_turn/self.hypothesis_radius
+    self.upper_turning_threshold = 0.6 * self.v_turn/self.hypothesis_radius
+    self.recover_turning_omega = 0.3 * self.v_turn/self.hypothesis_radius
+    self.command = -1
+    # self.turning_distance_threshold = 0.3
+    # self.temp_turning_position = []
 
 
   def marker_callback(self, msg):
     self.twist_lock.acquire()
     try:
       if msg.command == MGSMarker.STOP:
-        self.twist.linear.x = 0.
+        # self.twist.linear.x = 0.
+        self.command = 0
       elif msg.command == MGSMarker.START:
-        self.twist.linear.x = self.v1
+        # self.twist.linear.x = self.v1
+        self.command = 1
       elif msg.command == MGSMarker.SPEED_1:
-        self.twist.linear.x = self.v1
+        # self.twist.linear.x = self.v1
+        self.command = 1
       elif msg.command == MGSMarker.SPEED_2:
-        self.twist.linear.x = self.v2
+        # self.twist.linear.x = self.v2
+        self.command = 2
       elif msg.command == MGSMarker.SPEED_3:
-        self.twist.linear.x = self.v3
+        # self.twist.linear.x = self.v3
+        self.command = 3
       elif msg.command == MGSMarker.SPEED_4:
-        self.twist.linear.x = self.v4
+        # self.twist.linear.x = self.v4
+        self.command = 4
     finally:
       self.twist_lock.release()
 
@@ -106,36 +113,46 @@ class Follower:
     self.twist_lock.acquire()
     try:
       if not pos is None:
-        # self.twist.angular.z = -float(err) / 100 # turtlebot
+
         self.twist.angular.z = self.p * pos
         if abs(self.twist.angular.z) >= self.max_turning_omega:
           if self.twist.angular.z > 0:
             self.twist.angular.z = self.max_turning_omega
             self.twist.linear.x = self.v_turn
-            self.temp_turning_position = [self.pose_history[-1].odometry.pose.pose.orientation.x,self.pose_history[-1].odometry.pose.pose.orientation.y]
           else:
             self.twist.angular.z = -self.max_turning_omega
             self.twist.linear.x = self.v_turn
-            self.temp_turning_position = [self.pose_history[-1].odometry.pose.pose.orientation.x,self.pose_history[-1].odometry.pose.pose.orientation.y]
-        elif abs(self.twist.angular.z) >= self.upper_turning_threshold:
+          print("case 1","self.twist.angular.z",self.twist.angular.z,"self.twist.linear.x",self.twist.linear.x)
+        elif abs(self.twist.angular.z) >= self.upper_turning_threshold and abs(self.twist.angular.z) < self.max_turning_omega:
           self.twist.angular.z = self.p * pos
           self.twist.linear.x = self.v_turn
+          print("case 2","self.twist.angular.z",self.twist.angular.z,"self.twist.linear.x",self.twist.linear.x)
         else:
-          if self.temp_turning_position:
-            dist_2_temp_turning_position = np.sqrt((self.pose_history[-1].odometry.pose.pose.position.x - self.temp_turning_position[0])**2+\
-                                                    (self.pose_history[-1].odometry.pose.pose.position.y - self.temp_turning_position[1])**2)
-            if abs(self.twist.angular.z) < self.recover_turning_omega and dist_2_temp_turning_position >= self.turning_distance_threshold:
-              self.twist.linear.x = self.twist.linear.x
-              self.temp_turning_position = []
+          if abs(self.twist.angular.z) < self.recover_turning_omega:
+            if self.command == 0:
+              self.twist.linear.x = 0
+            elif self.command == 1:
+              self.twist.linear.x = self.v1
+            elif self.command == 2:
+              self.twist.linear.x = self.v2
+            elif self.command == 3:
+              self.twist.linear.x = self.v3
+            elif self.command == 4:
+              self.twist.linear.x = self.v4
+            else:
+              self.twist.linear.x = self.v1
+            self.twist.angular.z = self.p * pos
+          else:
+            if self.command == 0:
+              self.twist.linear.x = 0
             else:
               self.twist.linear.x = self.v_turn
-
-
-
-
-
+            self.twist.angular.z = self.p * pos
+          # print("case 3","self.twist.angular.z",self.twist.angular.z,"self.twist.linear.x",self.twist.linear.x)
+        print("self.twist.linear.x",self.twist.linear.x,"self.twist.angular.z",self.twist.angular.z)
       self.cmd_vel_pub.publish(self.twist)
     finally:
+
       self.twist_lock.release()
     # END CONTROL
 
