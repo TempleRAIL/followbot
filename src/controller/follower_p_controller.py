@@ -31,6 +31,7 @@ class Follower:
     self.max_turning_omega = 1.5*self.v_turn/self.hypothesis_radius
     self.upper_turning_threshold = 1*self.v_turn/self.hypothesis_radius
     self.recover_turning_omega = 0.5 * self.v_turn/self.hypothesis_radius
+    self.turning_distance_threshold = 0.3
     self.temp_turning_position = []
 
 
@@ -62,6 +63,8 @@ class Follower:
       self.pose_history.append(msg)
     else:
       self.pose_history.append(msg)
+    # print("self.pose_history[-1].odometry.pose.pose.orientation.x",self.pose_history[-1].odometry.pose.pose.position.x,"self.pose_history[-1].odometry.pose.pose.position.y",\
+          self.pose_history[-1].odometry.pose.pose.position.y)
     # if len(self.pose_history) > 1:
 
       # total_turning_time = self.pose_history[-1].header.stamp.secs - self.pose_history[0].header.stamp.secs + \
@@ -104,7 +107,6 @@ class Follower:
     try:
       if not pos is None:
         # self.twist.angular.z = -float(err) / 100 # turtlebot
-
         self.twist.angular.z = self.p * pos
         if abs(self.twist.angular.z) >= self.max_turning_omega:
           if self.twist.angular.z > 0:
@@ -120,7 +122,9 @@ class Follower:
           self.twist.linear.x = self.v_turn
         else:
           if self.temp_turning_position:
-            if self.twist.angular.z < self.recover_turning_omega:
+            dist_2_temp_turning_position = np.sqrt((self.pose_history[-1].odometry.pose.pose.position.x - self.temp_turning_position[0])**2+\
+                                                    (self.pose_history[-1].odometry.pose.pose.position.y - self.temp_turning_position[1])**2)
+            if abs(self.twist.angular.z) < self.recover_turning_omega and dist_2_temp_turning_position >= self.turning_distance_threshold:
               self.twist.linear.x = self.twist.linear.x
               self.temp_turning_position = []
             else:
