@@ -27,8 +27,10 @@ class Follower:
     self.pose_history = []
     self.curve_flag = 0 # 0 for no curve, 1 for curve
     self.hypothesis_radius = self.scale_factor * 1
-    self.divergence_threshold = self.hypothesis_radius*(1-math.cos(float(np.pi/27.0)))
-    self.max_turning_omega = self.v_turn/self.hypothesis_radius
+
+    self.max_turning_omega = 1.5*self.v_turn/self.hypothesis_radius
+    self.upper_turning_threshold = 1*self.v_turn/self.hypothesis_radius
+    self.recover_turning_omega = 0.5 * self.v_turn/self.hypothesis_radius
     self.temp_turning_position = []
 
 
@@ -89,7 +91,7 @@ class Follower:
     for m in msg.measurements:
       if m.type == MGSMeasurement.TRACK:
         pos = m.position
-    print("pos",pos)
+
     '''
       pos_list.append(m.position)
     if(len(pos_list) != 0):
@@ -113,10 +115,12 @@ class Follower:
             self.twist.angular.z = -self.max_turning_omega
             self.twist.linear.x = self.v_turn
             self.temp_turning_position = [self.pose_history[-1].odometry.pose.pose.orientation.x,self.pose_history[-1].odometry.pose.pose.orientation.y]
-        else:
+        elif abs(self.twist.angular.z) >= self.upper_turning_threshold:
           self.twist.angular.z = self.p * pos
+          self.twist.linear.x = self.v_turn
+        else:
           if self.temp_turning_position:
-            if ((self.temp_turning_position[0] - self.pose_history[-1].odometry.pose.pose.orientation.x)**2+(self.temp_turning_position[0] - self.pose_history[-1].odometry.pose.pose.orientation.y))**2 > 0.5:
+            if self.twist.angular.z < self.recover_turning_omega:
               self.twist.linear.x = self.twist.linear.x
               self.temp_turning_position = []
             else:
