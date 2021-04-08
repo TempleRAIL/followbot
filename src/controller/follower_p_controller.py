@@ -13,7 +13,7 @@ class Follower:
     self.cmd_vel_pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, queue_size=1)
     self.twist = Twist()
     self.twist_lock = threading.Lock()
-    self.p = rospy.get_param('~p', 7.0) # proportional controller constant
+    self.p = rospy.get_param('~p', 10.0) #7.0) # proportional controller constant
     self.v1 = rospy.get_param('~v', 0.666) # nominal velocity (1.49 MPH)
     self.v2 = rospy.get_param('~v', 0.782) # nominal velocity (1.75 MPH)
     self.v3 = rospy.get_param('~v', 0.849) # nominal velocity (1.90 MPH)
@@ -50,13 +50,6 @@ class Follower:
       if m.type == MGSMeasurement.TRACK:
         pos = m.position
 
-    '''
-      pos_list.append(m.position)
-    if(len(pos_list) != 0):
-      pos = np.sum(pos_list)
-    else:
-      pos = None
-    '''
     # set forward velocity
     self.twist_lock.acquire()
     try:

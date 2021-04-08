@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<robot name="sensor_monocular_camera" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:include filename="$(find followbot)/urdf/fred/fred_gazebo.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/fred/fred_properties.urdf.xacro"/>
+  
+  <xacro:property name="mono_cam_py" value="-0.0125"/>
+  <!-- Parameterised in part by the values in turtlebot_properties.urdf.xacro -->
+  <xacro:macro name="sensor_monocular_camera" params="parent">
+    <joint name="mono_camera_joint" type="fixed">
+      <axis xyz="0 1 0" />
+      <origin xyz="${mono_cam_px} ${mono_cam_py} ${mono_cam_pz}" rpy="${mono_cam_or} ${mono_cam_op} ${mono_cam_oy}"/>
+      <parent link="${parent}"/>
+      <child link="mono_camera_link"/>
+    </joint>
+
+    <joint name="mono_camera_optical_joint" type="fixed">
+      <origin xyz="0 0 0" rpy="${-M_PI/2} 0 ${-M_PI/2}" />
+      <parent link="mono_camera_link" />
+      <child link="mono_camera_optical_frame" />
+    </joint>
+    <link name="mono_camera_optical_frame"/>
+
+    <!-- Camera -->
+    <link name="mono_camera_link">
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.05 0.05 0.05"/>
+        </geometry>
+      </collision>
+
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.05 0.05 0.05"/>
+        </geometry>
+        <material name="red"/>
+      </visual>
+
+      <inertial>
+        <mass value="1e-5" />
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6" />
+      </inertial>
+    </link>
+
+    <!-- Monocular camera sensor for simulation -->
+    <fred_sim_2dsensor_cam/>
+  </xacro:macro>
+</robot>

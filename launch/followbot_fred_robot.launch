@@ -16,7 +16,7 @@
   <!-- Robot -->
   <include file="$(find followbot)/launch/includes/fred/fred.launch.xml">
     <arg name="base" value="fred"/>
-    <arg name="3d_sensor" value="kinect"/>
+    <arg name="3d_sensor" value="mono_kinect"/>
     <arg name="initial_pose" value="-x $(arg pose_initial_x) -y $(arg pose_initial_y) -Y $(arg pose_initial_theta)"/>
   </include>
 

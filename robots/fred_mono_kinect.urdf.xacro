@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+        <!--
+            - Base      : fred
+            - 3d Sensor : hokuyo_kinect
+        -->
+<robot name="fred_robot" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <xacro:include filename="$(find followbot)/urdf/fred/common_properties.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/fred/fred_properties.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/fred/fred.urdf.xacro" />
+  <xacro:include filename="$(find followbot)/urdf/sensors/fred_kinect.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/sensors/fred_monocular_camera.urdf.xacro"/>
+  <xacro:include filename="$(find followbot)/urdf/fred/fred_gazebo.urdf.xacro" />
+
+  <fred/>
+  <sensor_kinect  parent="base_link"/>
+  <sensor_monocular_camera  parent="base_link" />
+</robot>
