@@ -24,7 +24,10 @@ class Detector:
     self.detection_img_pub = rospy.Publisher('detection_image', Image, queue_size=10)
     self.track_width = rospy.get_param('~track_width', 0.104) # 0.10391598 
     self.bear_left = False
-  
+    self.last_lost_position = []
+    self.last_lost_pose = []
+    self.track_max_gap = 0.2 # 0.75 inch = 0.02 m
+    self.gap_flag = 0
 
   def mgs_marker_callback(self, msg):
     if msg.command == MGSMarker.BEAR_LEFT:
@@ -84,6 +87,20 @@ class Detector:
         cx = int(M_tape['m10']/M_tape['m00'])
         cy = int(M_tape['m01']/M_tape['m00'])
         cv2.circle(cv_image, (cx, cy), 20, (0,0,255), -1)
+      self.last_lost_position = [odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y,odom_msg.pose.pose.position.z]
+      self.last_lost_pose = odom_msg.pose.pose.orientation
+    else:
+      if not len(self.last_lost_position):
+        self.last_lost_position = [odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y,odom_msg.pose.pose.position.z]
+        self.last_lost_pose = odom_msg.pose.pose.orientation
+        self.gap_flag = 0
+      else:
+        dist = np.sqrt((odom_msg.pose.pose.position.x - self.last_lost_position[0])**2 + (odom_msg.pose.pose.position.y - self.last_lost_position[1])**2)
+        if dist > self.track_max_gap:
+          self.gap_flag = 1
+        else:
+          self.gap_flag = 0
+
 
     # find blue marker
     inds = np.argwhere(mask_blue.flatten())
@@ -109,6 +126,7 @@ class Detector:
       # make measurement
       m_marker = MGSMeasurement()
       m_marker.type = MGSMeasurement.MARKER
+
       # get point
       ind = int(np.median(inds))
       m_marker.position = -np.asscalar(cloud_pts[ind,0] + self.track_width / 2.) - 0.0125
@@ -122,6 +140,7 @@ class Detector:
         cv2.circle(cv_image, (cx, cy), 10, (120,255,120), -1)
 
     # publish the sphd measurements:
+    detections_msg.GAP_FLAG = self.gap_flag
     self.measurements_pub.publish(detections_msg)
 
     # get the detection image:
