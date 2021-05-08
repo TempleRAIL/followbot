@@ -26,8 +26,9 @@ class Detector:
     self.bear_left = False
     self.last_lost_position = []
     self.last_lost_pose = []
-    self.track_max_gap = 0.2 # 0.75 inch = 0.02 m
+    self.track_max_gap = 0.5 # 0.75 inch = 0.02 m
     self.gap_flag = 0
+    self.last_odom = Odometry()
 
   def mgs_marker_callback(self, msg):
     if msg.command == MGSMarker.BEAR_LEFT:
@@ -38,12 +39,14 @@ class Detector:
 
   def measurement_callback(self, img_msg, pcl_msg, odom_msg):
     # Initalize measurements:
+    if not self.last_odom.header.frame_id:
+      self.last_odom = odom_msg
     detections_msg = MGSMeasurements()
     detections_msg.header.stamp = rospy.Time.now()
     detections_msg.header.frame_id = pcl_msg.header.frame_id
     detections_msg.odometry = odom_msg
     detections_msg.measurements = []
-
+    detections_msg.last_odometry = self.last_odom
     # read point cloud data
     cloud_pts = pointcloud2_to_xyz_array(pcl_msg)
     # height is 0.19444602727890015
@@ -73,6 +76,8 @@ class Detector:
     inds = np.argwhere(mask_green.flatten())
     if not inds.size == 0:
       # make measurement
+      self.last_odom = odom_msg
+      detections_msg.last_odometry = self.last_odom
       m_track = MGSMeasurement()
       m_track.type = MGSMeasurement.TRACK
       # get point
@@ -89,6 +94,7 @@ class Detector:
         cv2.circle(cv_image, (cx, cy), 20, (0,0,255), -1)
       self.last_lost_position = [odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y,odom_msg.pose.pose.position.z]
       self.last_lost_pose = odom_msg.pose.pose.orientation
+      self.gap_flag = 0
     else:
       if not len(self.last_lost_position):
         self.last_lost_position = [odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y,odom_msg.pose.pose.position.z]

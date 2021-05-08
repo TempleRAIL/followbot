@@ -43,7 +43,6 @@ class Identifier():
         self.measurements.registerCallback(self.measurement_callback)
         self.closest_goal_pub = rospy.Publisher('camera_detection',PointCloud,queue_size=10)
 
-
         self.R = np.eye(2)
         self.t = np.zeros((2,1))
         self.bridge = cv_bridge.CvBridge()
@@ -52,13 +51,13 @@ class Identifier():
 
         while not self.success:
           try:
-            trans = self.tfBuffer.lookup_transform('base_link', 'mono_camera_link', rospy.Time(0))
+            trans = self.tfBuffer.lookup_transform('base_link', 'mono_camera_link', rospy.Time.now())
             theta = euler_from_quaternion([trans.transform.rotation.x,
                                          trans.transform.rotation.y,
                                          trans.transform.rotation.z,
                                          trans.transform.rotation.w])[2]
           except:
-            pass
+              pass
           else:
               self.R = np.array([[np.cos(theta), -np.sin(theta)],
                              [np.sin(theta),  np.cos(theta)]])
@@ -87,7 +86,7 @@ class Identifier():
         # print("self.depth_camera_info.height",self.depth_camera_info.height,"self.depth_camera_info.width",self.depth_camera_info.width)
 
         try:
-            trans = self.tfBuffer.lookup_transform('base_link', 'mono_camera_link', rospy.Time(0))
+            trans = self.tfBuffer.lookup_transform('base_link', 'mono_camera_link', rospy.Time.now())
             theta = euler_from_quaternion([trans.transform.rotation.x,
                                          trans.transform.rotation.y,
                                          trans.transform.rotation.z,
@@ -122,7 +121,7 @@ class Identifier():
                 for skel_index in range(0,len(convert_pixel_row)):
                     temp_depth_points = points[convert_pixel_row[skel_index],convert_pixel_col[skel_index]]
                     depth_points.append(temp_depth_points)
-                    depth_points_robot.append(np.matmul(self.R.T, [[temp_depth_points[0]],[temp_depth_points[1]]]) - self.t)
+                    depth_points_robot.append(np.matmul(self.R.T, [[temp_depth_points[0]],[temp_depth_points[1]]] - self.t))
                 points2.header.stamp = pcl_msg.header.stamp
                 points2.header.frame_id = "front_camera"
                 for one_depth_point in depth_points_robot:
