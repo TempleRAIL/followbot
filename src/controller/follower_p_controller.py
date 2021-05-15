@@ -56,7 +56,7 @@ class Follower:
         while not self.success:
             try:
 
-                (trans,rot) = self.tflistener.lookupTransform('/base_link', '/mono_camera_link', rospy.Time(0))
+                (trans,rot) = self.tflistener.lookupTransform('/base_footprint', '/mono_camera_link', rospy.Time(0))
                 temp_quaternion = (rot[0],rot[1],rot[2],rot[3])
                 self.fixed_theta = euler_from_quaternion(temp_quaternion)[2]
                 self.R = np.array([[np.cos(self.fixed_theta), -np.sin(self.fixed_theta)],
@@ -190,9 +190,9 @@ class Follower:
         theta_last = euler_from_quaternion([last_orientation.x,last_orientation.y,last_orientation.z,last_orientation.w])[2]
         theta_current = euler_from_quaternion([current_orientation.x,current_orientation.y,current_orientation.z,current_orientation.w])[2]
         dtheta = theta_current - theta_last
-        print("self.path.poses.position",self.path.poses.position)
-        if np.abs(dtheta)<0.1 and trans_l2c.dot(trans_l2c.T) < 1:
-            # no transformation/rotation between last and current base_link in world frame
+        # print("self.path.poses.position",self.path.poses.position)
+        if np.abs(dtheta)<0.08 and trans_l2c.dot(trans_l2c.T) < 0.6:
+            # no transformation/rotation between last and current base_footprint in world frame
             goal_position = np.array([self.path.poses.position[0],self.path.poses.position[1]])
             goal_pose_theta = euler_from_quaternion(self.path.poses.orientation)[2]
         else:
@@ -208,39 +208,65 @@ class Follower:
             goal_pose_theta = goal_pose_theta + self.fixed_theta
         except:
             print("self.R",self.R,"self.t",self.t,"goal_position",goal_position)
-        print("goal_position_1",goal_position)
-        if 0 < goal_pose_theta < np.pi/2 or goal_pose_theta > 3 * np.pi/2 :
-            if goal_pose_theta < 0:
-                goal_pose_theta = np.pi + goal_pose_theta
-            print("case_1")
-            R = (goal_position[0]* goal_position[0]+goal_position[1]* goal_position[1]) / (goal_pose_theta/(2*np.pi))
-            v_cmd = self.v_turn
-            w_cmd = goal_pose_theta / ((goal_position[0]* goal_position[0]+goal_position[1]* goal_position[1])/v_cmd)
-
-        elif np.pi/2 < goal_pose_theta < 3* np.pi/2:
-            R = (goal_position[0]* goal_position[0]+goal_position[1]* goal_position[1]) / ((2*np.pi + goal_pose_theta)/(2*np.pi))
-            v_cmd = self.v_turn
-            w_cmd = R * 2 * goal_pose_theta / v_cmd
-            print("case_2")
-        else:
-            R = 0
-            v_cmd = self.v_turn
-            w_cmd = 0
-            print("case_3")
-        # ensure velocity obeys the speed constraints
-        r = self.wheel_radius
-        L = self.wheel_base
-        print("v_cmd",v_cmd,"w_cmd",w_cmd,"goal_pose_theta",goal_pose_theta,"goal_position",goal_position)
-        u = max(v_cmd + L * w_cmd * 1,v_cmd - L * w_cmd * 1)
-        # print("u",u,self.v4)
-        if u > self.v4:
-            v_cmd = 0
-            w_cmd = self.v_turn / L * np.sign(w_cmd)
-            # print("w_cmd")
+        # print("goal_position_1",goal_position)
+        (v_cmd,w_cmd,case_label) = self.pure_persuit([goal_position[0],goal_position[1],goal_pose_theta])
+        # print("v_cmd,w_cmd,case_label",v_cmd,w_cmd,case_label)
         return (v_cmd, w_cmd)
 
-    def goal_callback(self,msg):
+    def pure_persuit(self,goal_pose):
+        # pure_persuit is under robot frame.
+        [gx,gy,gtheta] = goal_pose
+        dist = np.sqrt(gx**2+gy**2)
+        # dtheta_1 = gtheta
+        # dtheta_2 = 2*np.pi - gtheta
+        # if dtheta_1 < dtheta_2:
+        #     dtheta = dtheta_1
+        # else:
+        #     dtheta = dtheta_2
 
+        fai = np.arcsin(gy/dist)
+        case_label = 0
+        if fai>0:
+            if gtheta > fai and gtheta <= np.pi/2-fai:
+                R = (dist/2)/np.sin(fai/2)
+                v_cmd = self.v_turn
+                w_cmd = v_cmd/R
+                case_label = 1
+            elif gtheta >= np.pi/2-fai and gtheta <= np.pi/2+fai:
+                v_cmd = 0
+                w_cmd = self.max_turning_omega
+                case_label = 2
+            else:
+                R = dist/2
+                v_cmd = self.v_turn
+                w_cmd = 0.5*fai/(dist/self.v_turn)
+                case_label = 3
+        else:
+            if gtheta >= 3*np.pi/2 and gtheta < 2*np.pi - np.abs(fai):
+                R = (dist/2)/np.abs(np.sin(fai/2))
+                v_cmd = self.v_turn
+                w_cmd = -v_cmd/R
+                case_label = 4
+            elif gtheta > 3*np.pi/2 - np.abs(fai) and gtheta <= 3*np.pi/2:
+                v_cmd = 0
+                w_cmd = -self.max_turning_omega
+                case_label = 5
+            else:
+                R = dist/2
+                v_cmd = self.v_turn
+                w_cmd = 0.5*fai/(dist/self.v_turn)
+                case_label = 6
+        print("gx,gy",[gx,gy],"fai",fai,"gtheta",gtheta,"case_label",case_label)
+        L = self.wheel_base
+        u = max(v_cmd + L * w_cmd * 1,v_cmd - L * w_cmd * 1)
+        if u > self.v4:
+            v_cmd = v_cmd * (self.v4/u)
+            w_cmd = w_cmd * (self.v4/u)
+        return (v_cmd,w_cmd,case_label)
+
+
+
+    def goal_callback(self,msg):
         points = msg.points
         # try:
         if len(points)<=100:
@@ -277,7 +303,7 @@ class Follower:
                     current_min_points = [one_depth_point.x,one_depth_point.y]
             for one_depth_point in depth_points_robot:
                 temp_dist = (one_depth_point.x - current_min_points[0])**2 + (one_depth_point.y - current_min_points[1])**2
-                if  temp_dist < self.curve_fitting_distance_threshold**2:
+                if temp_dist < self.curve_fitting_distance_threshold**2:
                     if temp_dist > current_max_distance:
                         current_max_distance = temp_dist
                         current_max_points = [one_depth_point.x,one_depth_point.y]
@@ -289,7 +315,7 @@ class Follower:
         # k = reg.coef_[0][0]
         try:
             slope, intercept, r_value, p_value, std_err = stats.linregress(np.array(curve_fitting_list)[:,0],np.array(curve_fitting_list)[:,1])
-            temp_vec = [current_max_points[0] - current_max_points[0],current_max_points[1] - current_max_points[1]]
+            temp_vec = [current_max_points[0] - current_min_points[0],current_max_points[1] - current_min_points[1]]
             vec_pos = [1,slope*1]
             vec_neg = [-1, -slope*1]
             case_1 = np.dot(temp_vec, vec_pos)
@@ -304,7 +330,6 @@ class Follower:
                     theta = np.arctan(slope)+ np.pi
                 else:
                     theta = np.arctan(slope)+ 2*np.pi
-            print("theta",theta,"slope",slope)
                     # print("case4")
         except: # k = Inf
             if current_min_points[0]>=0:
@@ -315,7 +340,6 @@ class Follower:
                 # print("case6")
         temp_pose = Pose()
         temp_pose.position = [current_min_points[0],current_min_points[1],0]
-        print("temp_pose.position",temp_pose.position,"theta",theta )
         temp_pose.orientation = tf.transformations.quaternion_from_euler(0, 0, theta)
         self.path.header = msg.header
         self.path.poses = temp_pose
