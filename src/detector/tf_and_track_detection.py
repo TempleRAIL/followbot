@@ -21,6 +21,8 @@ import sensor_msgs.point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud
 import ros_numpy
 from geometry_msgs.msg import Point32
+import sensor_msgs.point_cloud2 as pc2
+import pcl
 
 class Identifier():
     def __init__(self):
@@ -51,7 +53,7 @@ class Identifier():
 
         while not self.success:
           try:
-            trans = self.tfBuffer.lookup_transform('base_link', 'mono_camera_link', rospy.Time.now())
+            trans = self.tfBuffer.lookup_transform('base_footprint', 'mono_camera_link', rospy.Time.now())
             theta = euler_from_quaternion([trans.transform.rotation.x,
                                          trans.transform.rotation.y,
                                          trans.transform.rotation.z,
@@ -86,7 +88,7 @@ class Identifier():
         # print("self.depth_camera_info.height",self.depth_camera_info.height,"self.depth_camera_info.width",self.depth_camera_info.width)
 
         try:
-            trans = self.tfBuffer.lookup_transform('base_link', 'mono_camera_link', rospy.Time.now())
+            trans = self.tfBuffer.lookup_transform('base_footprint', 'mono_camera_link', rospy.Time.now())
             theta = euler_from_quaternion([trans.transform.rotation.x,
                                          trans.transform.rotation.y,
                                          trans.transform.rotation.z,
@@ -100,7 +102,7 @@ class Identifier():
             print("failed to find available tf")
         try:
             pc = ros_numpy.numpify(pcl_msg)
-            points=np.zeros((pc.shape[0],pc.shape[1],3))
+            points = np.zeros((pc.shape[0],pc.shape[1],3))
             points[:,:,0]=pc['x']
             points[:,:,1]=pc['y']
             points[:,:,2]=pc['z']
@@ -114,25 +116,39 @@ class Identifier():
             # print("skeleton_start","rostime",rospy.Time.now().to_sec())
             skeleton = skeletonize(imask)
             [convert_pixel_row,convert_pixel_col]= np.where(skeleton)
+
             points2 = PointCloud()
             if len(convert_pixel_row):
-                depth_points = []
+                # depth_points = []
                 depth_points_robot = []
                 for skel_index in range(0,len(convert_pixel_row)):
                     temp_depth_points = points[convert_pixel_row[skel_index],convert_pixel_col[skel_index]]
-                    depth_points.append(temp_depth_points)
-                    depth_points_robot.append(np.matmul(self.R.T, [[temp_depth_points[0]],[temp_depth_points[1]]] - self.t))
+                    # depth_points.append(temp_depth_points)
+                    depth_points_robot.append(np.matmul(self.R.T, [[temp_depth_points[2]],[-temp_depth_points[0]]] - self.t))
                 points2.header.stamp = pcl_msg.header.stamp
-                points2.header.frame_id = "front_camera"
+                points2.header.frame_id = "mono_camera_link"
+
                 for one_depth_point in depth_points_robot:
                     points2.points.append(Point32(one_depth_point[0],one_depth_point[1],0))
                 self.closest_goal_pub.publish(points2)
             else:
                 current_min_points = []
 
-
-
-
+            # points3 = PointCloud()
+            # row_num = 360
+            # points3.header.stamp = pcl_msg.header.stamp
+            # points3.header.frame_id = "mono_camera_depth_link"
+            # # print("points[row_num-1,pts,0]",points[row_num-1,240:400])
+            #
+            # for pts in range(0,640):
+            #     points3.points.append(Point32(points[240-1,pts,2],-points[240-1,pts,0],-points[240-1,pts,1]))
+            #     points3.points.append(Point32(points[300-1,pts,2],-points[300-1,pts,0],-points[300-1,pts,1]))
+            #     points3.points.append(Point32(points[row_num-1,pts,2],-points[row_num-1,pts,0],-points[row_num-1,pts,1]))
+            #
+            #     points3.points.append(Point32(points[240-1,pts,1],points[240-1,pts,0],points[240-1,pts,2]))
+            #     points3.points.append(Point32(points[300-1,pts,1],points[300-1,pts,0],points[300-1,pts,2]))
+            #     points3.points.append(Point32(points[row_num-1,pts,1],points[row_num-1,pts,0],points[row_num-1,pts,2]))
+            # self.closest_goal_pub.publish(points3)
         except cv_bridge.CvBridgeError as e:
             print(e)
 
@@ -144,24 +160,6 @@ class Identifier():
 
     def depth_camera_info_callback(self,msg):
         self.depth_camera_info = msg
-
-    # def from_index_to_camera_coordinate(self,index,camera_info):
-    #     u0 = camera_info.P[2]
-    #     v0 = camera_info.P[6]
-    #     cam_P = np.reshape(camera_info.P,(3,4))
-    #     cam_P_33 = np.array(cam_P)[0:3,0:3]
-    #     index_in_camera_coordinate = []
-    #     index_in_world_coordinate = []
-    #     inv_cam_P_33 = np.linalg.inv(cam_P_33)
-    #     for one_index in index:
-    #         row = np.floor(one_index/self.cam_resolution_x)
-    #         col = np.floor(one_index - row * self.cam_resolution_x)
-    #         cam_x = np.floor(col - u0)
-    #         cam_y = np.floor(row - v0)
-    #         index_in_camera_coordinate.append([cam_x,cam_y])
-    #         world_coordinate_point = np.matmul(inv_cam_P_33,np.transpose([cam_x - cam_P[0,3],cam_y - cam_P[1,3],1-cam_P[2,3]]))
-    #         index_in_world_coordinate.append(np.transpose(world_coordinate_point))
-    #     return index_in_world_coordinate
 
 
 if __name__ == '__main__':
