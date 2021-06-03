@@ -17,6 +17,11 @@ from sensor_msgs.msg import Image, PointCloud2
 import matplotlib.pyplot as plt
 from skimage.morphology import skeletonize
 from skimage.transform import probabilistic_hough_line
+from scipy.spatial import distance
+import decimal
+from nav_msgs.msg import Odometry
+from tf.transformations import euler_from_quaternion
+from geometry_msgs.msg import Twist,Pose
 
 class HoughBundler:
     '''Clasterize and merge each cluster of cv2.HoughLinesP() output
@@ -101,7 +106,7 @@ class HoughBundler:
         'Clusterize (group) lines'
         groups = []  # all lines groups are here
         # Parameters to play with
-        min_distance_to_merge = 30
+        min_distance_to_merge = 15
         min_angle_to_merge = 30
         # first line will create new group every time
         groups.append([lines[0]])
@@ -171,12 +176,14 @@ class HoughBundler:
 
 class Detector:
     def __init__(self):
+        self.twist = Twist()
         self.bridge = cv_bridge.CvBridge()
         self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
         self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
-        # self.odom_sub = message_filters.Subscriber('odom', Odometry)
+        # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
         self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1,self.img_sub_2], queue_size=5, slop=0.1)
         self.measurements.registerCallback(self.measurements_callback)
+        self.cmd_vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=1)
         # T265 parameters
         self.PPX1 = 419.467010498047
         self.PPY1 = 386.97509765625
@@ -213,71 +220,142 @@ class Detector:
             p0, p1 = line
             if p0[1] > self.Fy1 and p1[1] > self.Fy1:
                 new_lines.append((p0[0],p0[1],p1[0],p1[1]))
-        # we can set ROI to decrease computation work load
-        print("temp_lines",temp_lines)
-        print("new_lines",new_lines)
+
         a = HoughBundler()
         foo = a.process_lines(new_lines, edges)
-        print("merged_lines_all",foo)
 
+        goal = self.XY_2_XYZ_Goal(foo,img_undistorted)
+        [vx,w] = self.goal_pursuit(goal)
+        self.twist.linear.x = vx
+        self.twist.angular.z = w
+        self.cmd_vel_pub.publish(self.twist)
 
-
-
-
-
-
-
-
-        fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
-                         sharex=True, sharey=True)
-
-
-
-
-        ax = axes.ravel()
-
-        ax[0].imshow(cv_image1,cmap='gray', vmin=0, vmax=255)
-        ax[0].axis('off')
-        ax[0].set_title('fisheye', fontsize=20)
-
-        ax[1].imshow(img_undistorted,cmap='gray', vmin=0, vmax=255)
-        ax[1].axis('off')
-        ax[1].set_title('img_undistorted', fontsize=20)
-
-        ax[2].imshow(im_bw,cmap='gray', vmin=0, vmax=255)
-        ax[2].axis('off')
-        ax[2].set_title('erosion', fontsize=20)
-
-        ax[3].imshow(edges,cmap='gray', vmin=0, vmax=255)
-        ax[3].axis('off')
-        ax[3].set_title('edges', fontsize=20)
-
-        ax[3].imshow(edges,cmap='gray', vmin=0, vmax=255)
-        ax[3].axis('off')
-        ax[3].set_title('edges', fontsize=20)
-
-        ax[4].imshow(edges * 0,cmap='gray')
-        for line in temp_lines:
-            p0, p1 = line
-            ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
-        ax[4].set_xlim((0, img_undistorted.shape[1]))
-        ax[4].set_ylim((img_undistorted.shape[0], 0))
-        ax[4].set_title('Probabilistic Hough')
-
-        ax[5].imshow(edges * 0,cmap='gray')
-        for line in foo:
-            p0, p1 = line
-            ax[5].plot((p0[0], p1[0]), (p0[1], p1[1]))
-        ax[5].set_xlim((0, img_undistorted.shape[1]))
-        ax[5].set_ylim((img_undistorted.shape[0], 0))
-        ax[5].set_title('Merged Probabilistic Hough')
-
-        fig.tight_layout()
-        plt.show()
+        # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
+        #                  sharex=True, sharey=True)
+        # ax = axes.ravel()
+        # ax[0].imshow(cv_image1,cmap='gray', vmin=0, vmax=255)
+        # ax[0].axis('off')
+        # ax[0].set_title('fisheye', fontsize=20)
+        #
+        # ax[1].imshow(img_undistorted,cmap='gray', vmin=0, vmax=255)
+        # ax[1].axis('off')
+        # ax[1].set_title('img_undistorted', fontsize=20)
+        #
+        # ax[2].imshow(im_bw,cmap='gray', vmin=0, vmax=255)
+        # ax[2].axis('off')
+        # ax[2].set_title('erosion', fontsize=20)
+        #
+        # ax[3].imshow(edges,cmap='gray', vmin=0, vmax=255)
+        # ax[3].axis('off')
+        # ax[3].set_title('edges', fontsize=20)
+        #
+        # ax[3].imshow(edges,cmap='gray', vmin=0, vmax=255)
+        # ax[3].axis('off')
+        # ax[3].set_title('edges', fontsize=20)
+        #
+        # ax[4].imshow(edges * 0,cmap='gray')
+        # for line in temp_lines:
+        #     p0, p1 = line
+        #     ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
+        # ax[4].set_xlim((0, img_undistorted.shape[1]))
+        # ax[4].set_ylim((img_undistorted.shape[0], 0))
+        # ax[4].set_title('Probabilistic Hough')
+        #
+        # ax[5].imshow(edges * 0,cmap='gray')
+        # for line in foo:
+        #     p0, p1 = line
+        #     ax[5].plot((p0[0], p1[0]), (p0[1], p1[1]))
+        #     ax[5].plot([p0[0],p1[0]],[p0[1],p1[1]],'bo')
+        # print("foo[0]",foo[0])
+        # ax[5].set_xlim((0, img_undistorted.shape[1]))
+        # ax[5].set_ylim((img_undistorted.shape[0], 0))
+        # ax[5].set_title('Merged Probabilistic Hough')
+        #
+        # fig.tight_layout()
+        # plt.show()
         # cv2.imshow("Image window", skeleton)
         # cv2.waitKey(0)
-if __name__ == '__main__':
+
+    def XY_2_XYZ_Goal(self,lines,img_undistorted):
+        height, width = img_undistorted.shape
+        center_point = [(np.floor(width/2),height-1)]
+        points_list = []
+        for line in lines:
+            points_list.append(line[0])
+            points_list.append(line[1])
+        # print("points_list",points_list)
+        DIST = distance.cdist(np.array(points_list),np.array(center_point))
+        index = np.where(DIST == DIST.min())
+        # print("lines",lines)
+        # print("DIST",DIST,"index",index,"center_point",center_point)
+        XY_goal = points_list[np.int(index[0])]
+        # print("XY_goal",XY_goal)
+        xx = XY_goal[0] - self.PPX1
+        yy = XY_goal[1] - self.PPY1
+        Y = -0.15
+        Z = np.abs((self.Fy1/1000 * Y) /yy)
+        X = xx*Z/(self.Fx1/1000)
+        result = [X,Y,Z]
+        # print("result",result)
+        return result
+
+    # def odom_callback(self,odom_msg):
+    #     position = [0,0]
+    #     position[0] = odom_msg.pose.pose.position.x
+    #     position[1] = odom_msg.pose.pose.position.y
+    #     vel = [0,0]
+    #     vel[0] = odom_msg.twist.twist.linear.x
+    #     vel[1] = odom_msg.twist.twist.linear.y
+    #     pose = euler_from_quaternion([odom_msg.pose.orientation.x,
+    #                                      odom_msg.pose.orientation.y,
+    #                                      odom_msg.pose.orientation.z,
+    #                                      odom_msg.pose.orientation.w])
+    #     pose_w = euler_from_quaternion([odom_msg.pose.angular.x,
+    #                                      odom_msg.pose.angular.y,
+    #                                      odom_msg.pose.angular.z,
+    #                                      odom_msg.pose.angular.w])
+    #     # transfer to 3D
+    def goal_pursuit(self,goal_pose):
+        [gx,gy,gtheta] = goal_pose
+        dist = np.sqrt(gx**2+gy**2)
+        if dist < 0.3:
+            v_fix = 0
+            w = 0
+        else:
+            if gx < 0.1:
+                v_fix = 0.5
+                w = 0
+
+            else:
+                line_center = np.array([gx/2.0,gy/2.0])
+                k1 = gy/gx
+                k2 = -gx/gy
+                b = gy/2.0 - k2 * gx/2.0
+                x2 = -b/k2
+                circle_center = np.array([x2,0])
+                k3 = gy/(gx - x2)
+                dtheta = np.arctan(k3)
+                if x2 > 0 and dtheta > 0:
+                    dtheta = np.pi - dtheta
+
+                if x2 < 0 and dtheta < 0:
+                    dtheta = np.pi + dtheta
+
+                dtheta = np.abs(dtheta)
+                v_fix = 0.5
+                route_dist = np.abs(x2) * dtheta / v_fix
+                w = dtheta/(route_dist/v_fix)
+                if x2 > 0:
+                    w = np.abs(w)
+                else:
+                    w = -np.abs(w)
+        return v_fix,w
+
+
+
+
+if __name__ == '__main__' :
     rospy.init_node('line_detector')
     detector = Detector()
     rospy.spin()
-    # END ALL
+
