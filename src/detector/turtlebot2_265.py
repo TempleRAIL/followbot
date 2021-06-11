@@ -208,9 +208,8 @@ class Detector:
         img_undistorted = cv2.GaussianBlur(img_undistorted, (5,5), 1)
         # cv2.imshow("Image window", img_undistorted)
         # cv2.waitKey(0)
-        kernel = np.ones((9,9),np.uint8)
+        kernel = np.ones((5,5),np.uint8)
         erosion = cv2.erode(img_undistorted,kernel,iterations = 1)
-
         (thresh, im_bw) = cv2.threshold(erosion, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         edges = cv2.Canny(erosion,175,250)
         temp_lines = probabilistic_hough_line(edges, threshold=20, line_length=40,line_gap=10)
@@ -225,54 +224,56 @@ class Detector:
         foo = a.process_lines(new_lines, edges)
 
         goal = self.XY_2_XYZ_Goal(foo,img_undistorted)
+        print("goal",goal)
         [vx,w] = self.goal_pursuit(goal)
         self.twist.linear.x = vx
         self.twist.angular.z = w
         self.cmd_vel_pub.publish(self.twist)
 
-        # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
-        #                  sharex=True, sharey=True)
-        # ax = axes.ravel()
-        # ax[0].imshow(cv_image1,cmap='gray', vmin=0, vmax=255)
-        # ax[0].axis('off')
-        # ax[0].set_title('fisheye', fontsize=20)
-        #
-        # ax[1].imshow(img_undistorted,cmap='gray', vmin=0, vmax=255)
-        # ax[1].axis('off')
-        # ax[1].set_title('img_undistorted', fontsize=20)
-        #
-        # ax[2].imshow(im_bw,cmap='gray', vmin=0, vmax=255)
-        # ax[2].axis('off')
-        # ax[2].set_title('erosion', fontsize=20)
-        #
-        # ax[3].imshow(edges,cmap='gray', vmin=0, vmax=255)
-        # ax[3].axis('off')
-        # ax[3].set_title('edges', fontsize=20)
-        #
-        # ax[3].imshow(edges,cmap='gray', vmin=0, vmax=255)
-        # ax[3].axis('off')
-        # ax[3].set_title('edges', fontsize=20)
-        #
-        # ax[4].imshow(edges * 0,cmap='gray')
-        # for line in temp_lines:
-        #     p0, p1 = line
-        #     ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
-        # ax[4].set_xlim((0, img_undistorted.shape[1]))
-        # ax[4].set_ylim((img_undistorted.shape[0], 0))
-        # ax[4].set_title('Probabilistic Hough')
-        #
-        # ax[5].imshow(edges * 0,cmap='gray')
-        # for line in foo:
-        #     p0, p1 = line
-        #     ax[5].plot((p0[0], p1[0]), (p0[1], p1[1]))
-        #     ax[5].plot([p0[0],p1[0]],[p0[1],p1[1]],'bo')
-        # print("foo[0]",foo[0])
-        # ax[5].set_xlim((0, img_undistorted.shape[1]))
-        # ax[5].set_ylim((img_undistorted.shape[0], 0))
-        # ax[5].set_title('Merged Probabilistic Hough')
-        #
-        # fig.tight_layout()
-        # plt.show()
+        fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
+                         sharex=True, sharey=True)
+        ax = axes.ravel()
+
+        ax[0].imshow(cv_image1,cmap='gray', vmin=0, vmax=255)
+        ax[0].axis('off')
+        ax[0].set_title('fisheye', fontsize=20)
+
+        ax[1].imshow(img_undistorted,cmap='gray', vmin=0, vmax=255)
+        ax[1].axis('off')
+        ax[1].set_title('img_undistorted', fontsize=20)
+
+        ax[2].imshow(im_bw,cmap='gray', vmin=0, vmax=255)
+        ax[2].axis('off')
+        ax[2].set_title('erosion', fontsize=20)
+
+        ax[3].imshow(edges,cmap='gray', vmin=0, vmax=255)
+        ax[3].axis('off')
+        ax[3].set_title('edges', fontsize=20)
+
+        ax[3].imshow(edges,cmap='gray', vmin=0, vmax=255)
+        ax[3].axis('off')
+        ax[3].set_title('edges', fontsize=20)
+
+        ax[4].imshow(edges * 0,cmap='gray')
+        for line in temp_lines:
+            p0, p1 = line
+            ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
+        ax[4].set_xlim((0, img_undistorted.shape[1]))
+        ax[4].set_ylim((img_undistorted.shape[0], 0))
+        ax[4].set_title('Probabilistic Hough')
+
+        ax[5].imshow(edges * 0,cmap='gray')
+        for line in foo:
+            p0, p1 = line
+            ax[5].plot((p0[0], p1[0]), (p0[1], p1[1]))
+            ax[5].plot([p0[0],p1[0]],[p0[1],p1[1]],'bo')
+        print("foo[0]",foo[0])
+        ax[5].set_xlim((0, img_undistorted.shape[1]))
+        ax[5].set_ylim((img_undistorted.shape[0], 0))
+        ax[5].set_title('Merged Probabilistic Hough')
+
+        fig.tight_layout()
+        plt.show()
         # cv2.imshow("Image window", skeleton)
         # cv2.waitKey(0)
 
@@ -283,20 +284,18 @@ class Detector:
         for line in lines:
             points_list.append(line[0])
             points_list.append(line[1])
-        # print("points_list",points_list)
+        print("points_list",points_list,"center_point",center_point)
         DIST = distance.cdist(np.array(points_list),np.array(center_point))
         index = np.where(DIST == DIST.min())
         # print("lines",lines)
         # print("DIST",DIST,"index",index,"center_point",center_point)
         XY_goal = points_list[np.int(index[0])]
-        # print("XY_goal",XY_goal)
-        xx = XY_goal[0] - self.PPX1
-        yy = XY_goal[1] - self.PPY1
-        Y = -0.15
-        Z = np.abs((self.Fy1/1000 * Y) /yy)
-        X = xx*Z/(self.Fx1/1000)
+        print("XY_goal",XY_goal)
+        Y = -150
+        Z = (XY_goal[1]-self.PPY1)/(self.Fy1/Y)
+        X = (XY_goal[0]-self.PPX1)/(self.Fx1/Z)
         result = [X,Y,Z]
-        # print("result",result)
+        print("result",result)
         return result
 
     # def odom_callback(self,odom_msg):
