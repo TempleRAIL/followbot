@@ -20,9 +20,10 @@ from skimage.transform import probabilistic_hough_line
 from scipy.spatial import distance
 import decimal
 from nav_msgs.msg import Odometry
-from tf.transformations import euler_from_quaternion
+from tf.transformations import euler_from_quaternion,quaternion_from_euler
 from geometry_msgs.msg import Twist, Pose
-
+import tf2_ros
+from geometry_msgs.msg import PoseStamped
 
 class HoughBundler:
     '''Clasterize and merge each cluster of cv2.HoughLinesP() output
@@ -179,6 +180,7 @@ class HoughBundler:
 class Controller:
     def __init__(self):
         self.twist = Twist()
+        self.mgs = 1
         self.lookahead = rospy.get_param('~lookahead')
         self.rate = rospy.get_param('~rate')
         self.goal_margin = rospy.get_param('~goal_margin')
@@ -187,11 +189,50 @@ class Controller:
         self.wheel_radius = rospy.get_param('~wheel_radius')
         self.v_max = rospy.get_param('~v_max')
         self.w_max = rospy.get_param('~w_max')
+        self.v1 = self.scale_factor * rospy.get_param('~v', 0.666)  # nominal velocity (1.49 MPH)
+        self.v2 = self.scale_factor * rospy.get_param('~v', 0.782)  # nominal velocity (1.75 MPH)
+        self.v3 = self.scale_factor * rospy.get_param('~v', 0.849)  # nominal velocity (1.90 MPH)
+        self.v4 = self.scale_factor * rospy.get_param('~v', 0.939)  # nominal velocity (2.10 MPH)
 
-    def find_goal2(self, currentp, current_vel, finalp, final_vel, avg_vel, dist_min):
-        x0, y0 = np.array(currentp)
+        self.current_v = []
+        self.current_theta = []
+
+        self.gap_start_tf = []
+        rospy.init_node('tf2_turtle_listener')
+        tfBuffer = tf2_ros.Buffer()
+        listener = tf2_ros.TransformListener(tfBuffer)
+        rate = rospy.Rate(10.0)
+        rospy.Subscriber("/camera/odom/sample", Odometry, self.odom_callback)
+        while not rospy.is_shutdown():
+            if self.mgs == 1:
+                try:
+                    trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
+                    self.gap_start_tf = trans
+
+                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                    continue
+
+
+            else:
+                try:
+                    trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
+                    self.straight_line_follower(self.gap_start_tf, trans)
+                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                    continue
+
+    def odom_callback(self,msg):
+
+        vx = msg.twist.twist.linear.x
+        vy = msg.twist.twist.linear.y
+        theta = msg.twist.twist.angular.z
+        self.current_v = [vx,vy]
+        self.current_theta = theta
+
+
+    def find_goal(self, current_p, current_vel, final_p, final_vel, avg_vel, dist_min):
+        x0, y0 = np.array(current_p)
         vx0, vy0 = np.array(current_vel)  # vx = vel, vy = 0
-        xf, yf = np.array(finalp)
+        xf, yf = np.array(final_p)
         vxf, vyf = np.array(final_vel)
         if xf ^ 2 + yf ^ 2 >= dist_min:
             x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf)
@@ -297,6 +338,9 @@ class Controller:
             w_cmd = w_cmd * (self.v4 / u)
         return (v_cmd, w_cmd, case_label)
 
+    def straight_line_follower(self,tf_gap,tf_now):
+
+
 
 class Detector:
     def __init__(self):
@@ -322,6 +366,7 @@ class Detector:
         self.Knew1[(0, 1), (0, 1)] = 1 * self.Knew1[(0, 1), (0, 1)]
         self.R = np.eye(3)
         self.t = np.array([0.15, -0.03, 0.15])
+        self.detection_pub = rospy.Publisher("/detected_line",PoseStamped,queue_size=1)
 
     def measurements_callback(self, img1, img2):
         cv_image1 = self.bridge.imgmsg_to_cv2(img1, desired_encoding='bgr8')
@@ -347,58 +392,65 @@ class Detector:
 
         a = HoughBundler()
         foo = a.process_lines(new_lines, edges)
-
         goal = self.XY_2_XYZ_Goal(foo, img_undistorted)
+        target_pose = PoseStamped()
+        target_pose.pose.position.x = goal[0]
+        target_pose.pose.position.y = goal[1]
+        target_pose.pose.position.z = goal[2]
+        target_pose.pose.orientation.x = quaternion_from_euler(0, 0, yaw)
+
+        self.detection_pub()
         print("goal", goal)
-        [vx, w] = self.goal_pursuit(goal)
-        self.twist.linear.x = vx
-        self.twist.angular.z = w
-        self.cmd_vel_pub.publish(self.twist)
+        # [vx, w] = self.goal_pursuit(goal)
+        # self.twist.linear.x = vx
+        # self.twist.angular.z = w
+        # self.cmd_vel_pub.publish(self.twist)
 
-        fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
-                                 sharex=True, sharey=True)
-        ax = axes.ravel()
 
-        ax[0].imshow(cv_image1, cmap='gray', vmin=0, vmax=255)
-        ax[0].axis('off')
-        ax[0].set_title('fisheye', fontsize=20)
-
-        ax[1].imshow(img_undistorted, cmap='gray', vmin=0, vmax=255)
-        ax[1].axis('off')
-        ax[1].set_title('img_undistorted', fontsize=20)
-
-        ax[2].imshow(im_bw, cmap='gray', vmin=0, vmax=255)
-        ax[2].axis('off')
-        ax[2].set_title('erosion', fontsize=20)
-
-        ax[3].imshow(edges, cmap='gray', vmin=0, vmax=255)
-        ax[3].axis('off')
-        ax[3].set_title('edges', fontsize=20)
-
-        ax[3].imshow(edges, cmap='gray', vmin=0, vmax=255)
-        ax[3].axis('off')
-        ax[3].set_title('edges', fontsize=20)
-
-        ax[4].imshow(edges * 0, cmap='gray')
-        for line in temp_lines:
-            p0, p1 = line
-            ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
-        ax[4].set_xlim((0, img_undistorted.shape[1]))
-        ax[4].set_ylim((img_undistorted.shape[0], 0))
-        ax[4].set_title('Probabilistic Hough')
-
-        ax[5].imshow(edges * 0, cmap='gray')
-        for line in foo:
-            p0, p1 = line
-            ax[5].plot((p0[0], p1[0]), (p0[1], p1[1]))
-            ax[5].plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
-        print("foo[0]", foo[0])
-        ax[5].set_xlim((0, img_undistorted.shape[1]))
-        ax[5].set_ylim((img_undistorted.shape[0], 0))
-        ax[5].set_title('Merged Probabilistic Hough')
-
-        fig.tight_layout()
-        plt.show()
+        # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
+        #                          sharex=True, sharey=True)
+        # ax = axes.ravel()
+        #
+        # ax[0].imshow(cv_image1, cmap='gray', vmin=0, vmax=255)
+        # ax[0].axis('off')
+        # ax[0].set_title('fisheye', fontsize=20)
+        #
+        # ax[1].imshow(img_undistorted, cmap='gray', vmin=0, vmax=255)
+        # ax[1].axis('off')
+        # ax[1].set_title('img_undistorted', fontsize=20)
+        #
+        # ax[2].imshow(im_bw, cmap='gray', vmin=0, vmax=255)
+        # ax[2].axis('off')
+        # ax[2].set_title('erosion', fontsize=20)
+        #
+        # ax[3].imshow(edges, cmap='gray', vmin=0, vmax=255)
+        # ax[3].axis('off')
+        # ax[3].set_title('edges', fontsize=20)
+        #
+        # ax[3].imshow(edges, cmap='gray', vmin=0, vmax=255)
+        # ax[3].axis('off')
+        # ax[3].set_title('edges', fontsize=20)
+        #
+        # ax[4].imshow(edges * 0, cmap='gray')
+        # for line in temp_lines:
+        #     p0, p1 = line
+        #     ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
+        # ax[4].set_xlim((0, img_undistorted.shape[1]))
+        # ax[4].set_ylim((img_undistorted.shape[0], 0))
+        # ax[4].set_title('Probabilistic Hough')
+        #
+        # ax[5].imshow(edges * 0, cmap='gray')
+        # for line in foo:
+        #     p0, p1 = line
+        #     ax[5].plot((p0[0], p1[0]), (p0[1], p1[1]))
+        #     ax[5].plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
+        # print("foo[0]", foo[0])
+        # ax[5].set_xlim((0, img_undistorted.shape[1]))
+        # ax[5].set_ylim((img_undistorted.shape[0], 0))
+        # ax[5].set_title('Merged Probabilistic Hough')
+        #
+        # fig.tight_layout()
+        # plt.show()
         # cv2.imshow("Image window", skeleton)
         # cv2.waitKey(0)
 
@@ -420,74 +472,38 @@ class Detector:
         points_list = []
         lines = self.theta_filter(lines)
         if len(lines) == 0:
-            result = np.array([0, -0.15, 1])
+            result = np.array([0, 0.15, 1])
         else:
             for line in lines:
                 points_list.append(line[0])
                 points_list.append(line[1])
             DIST = distance.cdist(np.array(points_list), np.array(center_point))
             index = np.where(DIST == DIST.min())
-            print("lines", lines)
+            if np.int(index[0])%2 == 0:
+                the_other_point = points_list[np.int(index[0]) + 1]
+            else:
+                the_other_point = points_list[np.int(index[0]) - 1]
+
+            # print("lines", lines)
             # print("DIST",DIST,"index",index,"center_point",center_point)
             XY_goal = points_list[np.int(index[0])]
-            print("XY_goal", XY_goal)
-            Y = -150
-            print("self.Fy1/Y", self.Fy1 * Y, "XY_goal[1]-self.PPY1", XY_goal[1] - self.PPY1)
+            # print("XY_goal", XY_goal)
+            Y = 150
+            # print("self.Fy1/Y", self.Fy1 * Y, "XY_goal[1]-self.PPY1", XY_goal[1] - self.PPY1)
             Z = (self.Fy1 * Y) / (XY_goal[1] - self.PPY1)
-            print("Z", Z)
-            X = (XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
+            # print("Z", Z)
+            X = -(XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
             result = np.array([X, Y, Z]) / 1000.0
+
+            XY_goal2 = the_other_point
+            Y = 150
+            Z = (self.Fy1 * Y) / (XY_goal[1] - self.PPY1)
+            X = -(XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
+            result2 = np.array([X, Y, Z]) / 1000.0
+
+
+
         return result
-
-    # def odom_callback(self,odom_msg):
-    #     position = [0,0]
-    #     position[0] = odom_msg.pose.pose.position.x
-    #     position[1] = odom_msg.pose.pose.position.y
-    #     vel = [0,0]
-    #     vel[0] = odom_msg.twist.twist.linear.x
-    #     vel[1] = odom_msg.twist.twist.linear.y
-    #     pose = euler_from_quaternion([odom_msg.pose.orientation.x,
-    #                                      odom_msg.pose.orientation.y,
-    #                                      odom_msg.pose.orientation.z,
-    #                                      odom_msg.pose.orientation.w])
-    #     pose_w = euler_from_quaternion([odom_msg.pose.angular.x,
-    #                                      odom_msg.pose.angular.y,
-    #                                      odom_msg.pose.angular.z,
-    #                                      odom_msg.pose.angular.w])
-    #     # transfer to 3D
-    def goal_pursuit(self, goal_pose):
-        [gx, gy, gtheta] = goal_pose
-        dist = np.sqrt(gx ** 2 + gy ** 2)
-        if dist < 0.3:
-            v_fix = 0
-            w = 0
-        else:
-            if gx < 0.1:
-                v_fix = 0.5
-                w = 0
-            else:
-                line_center = np.array([gx / 2.0, gy / 2.0])
-                k1 = gy / gx
-                k2 = -gx / gy
-                b = gy / 2.0 - k2 * gx / 2.0
-                x2 = -b / k2
-                circle_center = np.array([x2, 0])
-                k3 = gy / (gx - x2)
-                dtheta = np.arctan(k3)
-                if x2 > 0 and dtheta > 0:
-                    dtheta = np.pi - dtheta
-                if x2 < 0 and dtheta < 0:
-                    dtheta = np.pi + dtheta
-
-                dtheta = np.abs(dtheta)
-                v_fix = 0.5
-                route_dist = np.abs(x2) * dtheta / v_fix
-                w = dtheta / (route_dist / v_fix)
-                if x2 > 0:
-                    w = np.abs(w)
-                else:
-                    w = -np.abs(w)
-        return v_fix, w
 
 
 if __name__ == '__main__':
