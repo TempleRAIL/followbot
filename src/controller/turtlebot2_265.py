@@ -25,6 +25,7 @@ from geometry_msgs.msg import Twist, Pose
 import tf2_ros
 from geometry_msgs.msg import PoseStamped
 
+
 class HoughBundler:
     '''Clasterize and merge each cluster of cv2.HoughLinesP() output
     a = HoughBundler()
@@ -180,15 +181,16 @@ class HoughBundler:
 class Controller:
     def __init__(self):
         self.twist = Twist()
-        self.mgs = 1
-        self.lookahead = rospy.get_param('~lookahead')
-        self.rate = rospy.get_param('~rate')
-        self.goal_margin = rospy.get_param('~goal_margin')
+        self.lookahead = rospy.get_param('~lookahead',1)
+        self.rate = rospy.get_param('~rate',10)
+        self.goal_margin = rospy.get_param('~goal_margin',0.1)
 
-        self.wheel_base = rospy.get_param('~wheel_base')
-        self.wheel_radius = rospy.get_param('~wheel_radius')
-        self.v_max = rospy.get_param('~v_max')
-        self.w_max = rospy.get_param('~w_max')
+        self.wheel_base = rospy.get_param('~wheel_base',0.8)
+        self.wheel_radius = rospy.get_param('~wheel_radius',0.2)
+        self.v_max = rospy.get_param('~v_max',0.5)
+        self.w_max = rospy.get_param('~w_max',0.2)
+        self.scale_factor = 0.5 # from true world to simulation
+        self.p = self.scale_factor*rospy.get_param('~p', 7.0) # proportional controller constant
         self.v1 = self.scale_factor * rospy.get_param('~v', 0.666)  # nominal velocity (1.49 MPH)
         self.v2 = self.scale_factor * rospy.get_param('~v', 0.782)  # nominal velocity (1.75 MPH)
         self.v3 = self.scale_factor * rospy.get_param('~v', 0.849)  # nominal velocity (1.90 MPH)
@@ -199,26 +201,9 @@ class Controller:
 
         self.gap_start_tf = []
         rospy.init_node('tf2_turtle_listener')
-        tfBuffer = tf2_ros.Buffer()
-        listener = tf2_ros.TransformListener(tfBuffer)
-        rate = rospy.Rate(10.0)
+
         rospy.Subscriber("/camera/odom/sample", Odometry, self.odom_callback)
-        while not rospy.is_shutdown():
-            if self.mgs == 1:
-                try:
-                    trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
-                    self.gap_start_tf = trans
 
-                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-                    continue
-
-
-            else:
-                try:
-                    trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
-                    self.straight_line_follower(self.gap_start_tf, trans)
-                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-                    continue
 
     def odom_callback(self,msg):
 
@@ -264,7 +249,7 @@ class Controller:
                 else:
                     theta = np.pi + np.arctan(np.abs(vyf) / np.abs(vxf))
         goal_pose = [goal_x, goal_y, theta]
-        v, w = self.pure_persuit(goal_pose)  # to be changed with proportional control
+        [v, w] = self.pure_persuit(goal_pose)  # to be changed with proportional control
         self.twist.linear.x = v
         self.twist.angular.z = w
         return self.twist
@@ -367,6 +352,40 @@ class Detector:
         self.R = np.eye(3)
         self.t = np.array([0.15, -0.03, 0.15])
         self.detection_pub = rospy.Publisher("/detected_line",PoseStamped,queue_size=1)
+        self.mgs = 1
+        self.last_trans = []
+        self.last_theta = []
+        tfBuffer = tf2_ros.Buffer()
+        listener = tf2_ros.TransformListener(tfBuffer)
+        rate = rospy.Rate(10.0)
+        while not rospy.is_shutdown():
+            if self.mgs == 1:
+                try:
+                    trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
+                    theta = euler_from_quaternion([trans.transform.rotation.x,
+                                         trans.transform.rotation.y,
+                                         trans.transform.rotation.z,
+                                         trans.transform.rotation.w])[2]
+                    self.last_trans = []
+                    self.last_theta = []
+                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                    continue
+
+
+            else:
+
+
+                try:
+                    trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
+                    theta = euler_from_quaternion([trans.transform.rotation.x,
+                                         trans.transform.rotation.y,
+                                         trans.transform.rotation.z,
+                                         trans.transform.rotation.w])[2]
+                    if not self.last_trans:
+                        self.last_trans = trans
+                        self.last_theta = theta
+                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                    continue
 
     def measurements_callback(self, img1, img2):
         cv_image1 = self.bridge.imgmsg_to_cv2(img1, desired_encoding='bgr8')
@@ -399,7 +418,7 @@ class Detector:
         target_pose.pose.position.z = goal[2]
         target_pose.pose.orientation.x = quaternion_from_euler(0, 0, yaw)
 
-        self.detection_pub()
+
         print("goal", goal)
         # [vx, w] = self.goal_pursuit(goal)
         # self.twist.linear.x = vx
