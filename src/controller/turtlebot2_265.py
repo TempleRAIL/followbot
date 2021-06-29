@@ -24,6 +24,9 @@ from tf.transformations import euler_from_quaternion,quaternion_from_euler
 from geometry_msgs.msg import Twist, Pose
 import tf2_ros
 from geometry_msgs.msg import PoseStamped
+from interactive_markers.interactive_marker_server import *
+from visualization_msgs.msg import Marker
+from visualization_msgs.msg import MarkerArray
 
 
 class HoughBundler:
@@ -190,43 +193,29 @@ class Controller:
         self.v_max = rospy.get_param('~v_max',0.5)
         self.w_max = rospy.get_param('~w_max',0.2)
         self.scale_factor = 0.5 # from true world to simulation
-        self.p = self.scale_factor*rospy.get_param('~p', 7.0) # proportional controller constant
+        self.p = self.scale_factor*rospy.get_param('~p', -7.0) # proportional controller constant
         self.v1 = self.scale_factor * rospy.get_param('~v', 0.666)  # nominal velocity (1.49 MPH)
         self.v2 = self.scale_factor * rospy.get_param('~v', 0.782)  # nominal velocity (1.75 MPH)
         self.v3 = self.scale_factor * rospy.get_param('~v', 0.849)  # nominal velocity (1.90 MPH)
         self.v4 = self.scale_factor * rospy.get_param('~v', 0.939)  # nominal velocity (2.10 MPH)
-
+        self.v_turn = self.scale_factor*rospy.get_param('~v', 0.425)
+        self.max_turning_omega = 1.5 * self.v_turn/1
         self.current_v = []
         self.current_theta = []
 
-        self.gap_start_tf = []
-        rospy.init_node('tf2_turtle_listener')
-
-        rospy.Subscriber("/camera/odom/sample", Odometry, self.odom_callback)
-
-
-    def odom_callback(self,msg):
-
-        vx = msg.twist.twist.linear.x
-        vy = msg.twist.twist.linear.y
-        theta = msg.twist.twist.angular.z
-        self.current_v = [vx,vy]
-        self.current_theta = theta
-
-
-    def find_goal(self, current_p, current_vel, final_p, final_vel, avg_vel, dist_min):
+    def find_goal(self, current_p, current_vel, final_p, final_vel, dist_min,final_theta):
         x0, y0 = np.array(current_p)
         vx0, vy0 = np.array(current_vel)  # vx = vel, vy = 0
         xf, yf = np.array(final_p)
         vxf, vyf = np.array(final_vel)
-        if xf ^ 2 + yf ^ 2 >= dist_min:
-            x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf)
-            y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf)
+        if np.sqrt(xf ** 2 + yf ** 2) >= dist_min:
+            x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,self.v1)
+            y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,self.v1)
             expected_time = self.convolve_and_sum(x_params, y_params, dist_min)
-            goal_x = x_params * np.array([1, expected_time, expected_time ^ 2, expected_time ^ 3])
-            goal_y = y_params * np.array([1, expected_time, expected_time ^ 2, expected_time ^ 3])
-            vx = x_params * np.array([0, 1, 2 * expected_time, 3 * expected_time ^ 2])
-            vy = y_params * np.array([0, 1, 2 * expected_time, 3 * expected_time ^ 2])
+            goal_x = x_params * np.array([1, expected_time, expected_time ** 2, expected_time ** 3])
+            goal_y = y_params * np.array([1, expected_time, expected_time ** 2, expected_time ** 3])
+            vx = x_params * np.array([0, 1, 2 * expected_time, 3 * expected_time ** 2])
+            vy = y_params * np.array([0, 1, 2 * expected_time, 3 * expected_time ** 2])
             if vx > 0:
                 theta = np.arctan(vy / vx)
             elif vx == 0:
@@ -239,8 +228,9 @@ class Controller:
         else:
             goal_x = xf
             goal_y = yf
+
             if vyf > 0:
-                theta = np.arctan(vxf / vyf)
+                theta = np.arctan(vyf / vxf)
             elif vyf == 0:
                 theta = np.pi / 2
             else:
@@ -249,34 +239,44 @@ class Controller:
                 else:
                     theta = np.pi + np.arctan(np.abs(vyf) / np.abs(vxf))
         goal_pose = [goal_x, goal_y, theta]
-        [v, w] = self.pure_persuit(goal_pose)  # to be changed with proportional control
+        [v, w, case_label] = self.pure_persuit(goal_pose)  # to be changed with proportional control
         self.twist.linear.x = v
         self.twist.angular.z = w
         return self.twist
 
     def cubic_poly_motion_planning(self, currentp, current_vel, finalp, final_vel, avg_vel):
-        p0 = np.array(currentp)
-        v0 = np.array(current_vel)  # vx = vel, vy = 0
-        pf = np.array(finalp)
-        vf = np.array(final_vel)
-        temp_vec = np.array(finalp - currentp)
+        p0 = np.array([currentp])
+        v0 = np.array([current_vel])  # vx = vel, vy = 0
+        pf = np.array([finalp])
+        vf = np.array([final_vel])
+        temp_vec = np.array(pf - p0)
         dt = np.dot(temp_vec, temp_vec) / avg_vel
         a0 = p0
         a1 = v0
-        M = np.array([[dt ^ 2, dt ^ 3], [2 * dt, 3 * dt ^ 2]])
-        a2, a3 = np.inv(M) * np.array([[pf - a0 - dt * a1], [vf - a1]])
-        return [a0, a1, a2, a3]
+        M = np.array([[dt ** 2, dt ** 3], [2 * dt, 3 * dt ** 2]])
+        a2, a3 =np.matmul( np.linalg.inv(M) , np.array([pf - a0 - dt * a1, vf - a1]))#here is a problem
+        print("dt",dt,"a0",a0,"a1",a1,"a2",a2,"a3",a3)
+        return [list(a0), list(a1), list(a2), list(a3)]
 
     def convolve_and_sum(self, x_a, y_a, dist_min):
+        # x_a = np.reshape(x_a,(1,4))
+        # y_a = np.reshape(y_a,(1,4))
+        print("reshape(x_a,4)",np.reshape(x_a,4))
+        x_a = np.reshape(x_a,4)
+        y_a = np.reshape(y_a,4)
         x_a_convolve = np.convolve(x_a, x_a)
         y_a_convolve = np.convolve(y_a, y_a)
+        # print("x_a_convolve",x_a_convolve,"y_a_convolve",y_a_convolve)
         poly_param = x_a_convolve + y_a_convolve
-        poly_param[-1] = poly_param[-1] - dist_min
+        poly_param[-1] = poly_param[-1] - dist_min**2
+        # print("poly_param",poly_param)
         approximate_time = np.roots(poly_param)
         temp = []
         for item in approximate_time:
             if item > 0:
                 temp.append(item)
+        # print("temp",temp)
+        print("np.min(temp)",np.min(temp))
         return np.min(temp)
 
     def pure_persuit(self, goal_pose):
@@ -323,9 +323,59 @@ class Controller:
             w_cmd = w_cmd * (self.v4 / u)
         return (v_cmd, w_cmd, case_label)
 
-    def straight_line_follower(self,tf_gap,tf_now):
+    def straight_line_follower(self,tf_gap,tf_now,current_vel):
+
+        tf_gap_theta = euler_from_quaternion([tf_gap.transform.rotation.x,
+                                         tf_gap.transform.rotation.y,
+                                         tf_gap.transform.rotation.z,
+                                         tf_gap.transform.rotation.w])[2]
+        tf_gap_position = [tf_gap.transform.translation.x,tf_gap.transform.translation.y]
+        tf_gap_position2 = [tf_gap.transform.translation.x + np.cos(tf_gap_theta),tf_gap.transform.translation.y+ np.sin(tf_gap_theta)]
+        tf_now_theta = euler_from_quaternion([tf_now.transform.rotation.x,
+                                         tf_now.transform.rotation.y,
+                                         tf_now.transform.rotation.z,
+                                         tf_now.transform.rotation.w])[2]
+
+        tf_now_position = [tf_now.transform.translation.x,tf_now.transform.translation.y]
+        a = HoughBundler()
+        dist = a.DistancePointLine(tf_now_position,[tf_gap_position[0],tf_gap_position[1],tf_gap_position2[0],tf_gap_position2[1]])
+        self.twist.angular.z = self.p * dist
+        vx = current_vel[0]
+        vy = current_vel[1]
+        self.twist.linear.x = vx
 
 
+class markerGen():
+    def __init__(self):
+        self.markerPointPub = rospy.Publisher("/markerPointPub", Marker, queue_size=1)
+        self.markerPub = rospy.Publisher("/markerPub",MarkerArray,queue_size=10)
+        self.robotGoalMarker = MarkerArray()
+        self.robotPoseMarker = MarkerArray()
+        self.robotVelMarker = MarkerArray()
+        self.markerID = 0
+        self.colorID = 0
+        self.colorDict = {
+            0:[0,0,0],
+            1:[25,100,255],
+            2:[0,255,0],
+            3:[0,0,255],
+            4:[255,255,0],
+            5:[0,255,255],
+            6:[255,0,255],
+            7:[128,128,128],
+            8:[0,0,128],
+            9:[0,128,128],
+            10:[128,0,128],
+            11:[0,128,0]
+        }
+        self.markerID = 0
+        self.colorID = 0
+        while not rospy.is_shutdown():
+
+            self.markerPub.publish(self.robotPoseMarker)
+            self.markerPub.publish(self.robotVelMarker)
+            self.markerPub.publish(self.robotGoalMarker)
+            rospy.sleep(0.2)
 
 class Detector:
     def __init__(self):
@@ -337,7 +387,9 @@ class Detector:
         self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=5,
                                                                         slop=0.1)
         self.measurements.registerCallback(self.measurements_callback)
-        self.cmd_vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=1)
+        self.odom_sub = rospy.Subscriber('camera/odom/sample',Odometry,self.odom_callback,queue_size=5)
+        # self.mgs_sub = rospy.Subscriber('mag_track_pos',roboteq_motor_controller_driver/channel_values,self.mgs_callback,queue_size=5)
+        self.cmd_vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=5)
         # T265 parameters
         self.PPX1 = 419.467010498047
         self.PPY1 = 386.97509765625
@@ -358,14 +410,17 @@ class Detector:
         tfBuffer = tf2_ros.Buffer()
         listener = tf2_ros.TransformListener(tfBuffer)
         rate = rospy.Rate(10.0)
+        self.current_v = []
+        self.current_theta = 0
+
         while not rospy.is_shutdown():
             if self.mgs == 1:
                 try:
-                    trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
-                    theta = euler_from_quaternion([trans.transform.rotation.x,
-                                         trans.transform.rotation.y,
-                                         trans.transform.rotation.z,
-                                         trans.transform.rotation.w])[2]
+                    self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
+                    self.theta = euler_from_quaternion([self.trans.transform.rotation.x,
+                                         self.trans.transform.rotation.y,
+                                         self.trans.transform.rotation.z,
+                                         self.trans.transform.rotation.w])[2]
                     self.last_trans = []
                     self.last_theta = []
                 except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
@@ -373,19 +428,24 @@ class Detector:
 
 
             else:
-
-
                 try:
-                    trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
-                    theta = euler_from_quaternion([trans.transform.rotation.x,
-                                         trans.transform.rotation.y,
-                                         trans.transform.rotation.z,
-                                         trans.transform.rotation.w])[2]
+                    self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
+                    self.theta = euler_from_quaternion([self.trans.transform.rotation.x,
+                                         self.trans.transform.rotation.y,
+                                         self.trans.transform.rotation.z,
+                                         self.trans.transform.rotation.w])[2]
                     if not self.last_trans:
-                        self.last_trans = trans
-                        self.last_theta = theta
+                        self.last_trans = self.trans
+                        self.last_theta = self.theta
                 except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                     continue
+
+    def odom_callback(self,msg):
+        vx = msg.twist.twist.linear.x
+        vy = msg.twist.twist.linear.y
+        theta = msg.twist.twist.angular.z
+        self.current_v = [vx,vy]
+        self.current_theta = theta
 
     def measurements_callback(self, img1, img2):
         cv_image1 = self.bridge.imgmsg_to_cv2(img1, desired_encoding='bgr8')
@@ -400,7 +460,7 @@ class Detector:
         kernel = np.ones((5, 5), np.uint8)
         erosion = cv2.erode(img_undistorted, kernel, iterations=1)
         (thresh, im_bw) = cv2.threshold(erosion, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-        edges = cv2.Canny(erosion, 128, 250)
+        edges = cv2.Canny(erosion, 128, 255)
         temp_lines = probabilistic_hough_line(edges, threshold=20, line_length=40, line_gap=10)
 
         new_lines = []
@@ -412,19 +472,37 @@ class Detector:
         a = HoughBundler()
         foo = a.process_lines(new_lines, edges)
         goal = self.XY_2_XYZ_Goal(foo, img_undistorted)
-        target_pose = PoseStamped()
-        target_pose.pose.position.x = goal[0]
-        target_pose.pose.position.y = goal[1]
-        target_pose.pose.position.z = goal[2]
-        target_pose.pose.orientation.x = quaternion_from_euler(0, 0, yaw)
 
+        # target_pose = PoseStamped()
+        # target_pose.pose.position.x = goal[0]
+        # target_pose.pose.position.y = goal[1]
+        # target_pose.pose.position.z = goal[2]
+        # # target_pose.pose.orientation.x = quaternion_from_euler(0, 0, yaw)
+        #
 
         print("goal", goal)
-        # [vx, w] = self.goal_pursuit(goal)
+
+        controller_object = Controller()
+        if any(goal):
+            current_p = [self.trans.transform.translation.x,self.trans.transform.translation.y]
+            target_v = [self.current_v[0] * np.cos(goal[3]),self.current_v[0] * np.sin(goal[3])]
+            result = controller_object.find_goal(current_p, self.current_v, [goal[0],goal[1]], target_v, 1,goal[3])
+        else:
+            # if is self.last_trans:
+            # last_tran = [0,0,0]
+            result = controller_object.straight_line_follower(self.last_trans,self.trans,self.current_v)
+
+        self.twist = result
+        robotPose = [0,0]
+        self.poseList = robotPose
+        self.robotPoseMarker = MarkerArray()
+        self.robotVelMarker = MarkerArray()
+        self.robotObsMarker = MarkerArray()
+
+
         # self.twist.linear.x = vx
         # self.twist.angular.z = w
         # self.cmd_vel_pub.publish(self.twist)
-
 
         # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
         #                          sharex=True, sharey=True)
@@ -480,7 +558,6 @@ class Detector:
                 k = (line[0][1] - line[1][1]) / (line[1][0] - line[0][0])
             else:
                 k = np.Inf
-            print("line", line, "k", k)
             if np.abs(k) >= 1.73:
                 temp_lines.append(line)
         return temp_lines
@@ -506,22 +583,25 @@ class Detector:
             # print("lines", lines)
             # print("DIST",DIST,"index",index,"center_point",center_point)
             XY_goal = points_list[np.int(index[0])]
-            # print("XY_goal", XY_goal)
             Y = 150
-            # print("self.Fy1/Y", self.Fy1 * Y, "XY_goal[1]-self.PPY1", XY_goal[1] - self.PPY1)
             Z = (self.Fy1 * Y) / (XY_goal[1] - self.PPY1)
-            # print("Z", Z)
             X = -(XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
-            result = np.array([X, Y, Z]) / 1000.0
+
 
             XY_goal2 = the_other_point
-            Y = 150
-            Z = (self.Fy1 * Y) / (XY_goal[1] - self.PPY1)
-            X = -(XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
-            result2 = np.array([X, Y, Z]) / 1000.0
+            Y2 = 150
+            Z2 = (self.Fy1 * Y) / (XY_goal2[1] - self.PPY1)
+            X2 = -(XY_goal2[0] - self.PPX1) / (self.Fx1 / Z)
+            # x = Z,y = -X, z = -Y
+            X,Y,Z = Z,-X,-Y
+            X2,Y2,Z2 = Z2, -X2, -Y2
 
+            if np.abs(X2-X)<0.1:
+                theta = 0
+            else:
+                theta = np.arctan((Y2-Y)/(X2-X))
 
-
+            result = np.array([X/ 1000.0, Y/ 1000.0, Z/ 1000.0,theta])
         return result
 
 
