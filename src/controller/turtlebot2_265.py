@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 # BEGIN ALL
 import functools
@@ -329,16 +330,16 @@ class Controller:
                                          tf_gap.transform.rotation.y,
                                          tf_gap.transform.rotation.z,
                                          tf_gap.transform.rotation.w])[2]
-        tf_gap_position = [tf_gap.transform.translation.x,tf_gap.transform.translation.y]
-        tf_gap_position2 = [tf_gap.transform.translation.x + np.cos(tf_gap_theta),tf_gap.transform.translation.y+ np.sin(tf_gap_theta)]
+        tf_gap_position = [tf_gap.transform.translation.x, tf_gap.transform.translation.y]
+        tf_gap_position2 = [tf_gap.transform.translation.x + np.cos(tf_gap_theta), tf_gap.transform.translation.y + np.sin(tf_gap_theta)]
         tf_now_theta = euler_from_quaternion([tf_now.transform.rotation.x,
                                          tf_now.transform.rotation.y,
                                          tf_now.transform.rotation.z,
                                          tf_now.transform.rotation.w])[2]
 
-        tf_now_position = [tf_now.transform.translation.x,tf_now.transform.translation.y]
+        tf_now_position = [tf_now.transform.translation.x, tf_now.transform.translation.y]
         a = HoughBundler()
-        dist = a.DistancePointLine(tf_now_position,[tf_gap_position[0],tf_gap_position[1],tf_gap_position2[0],tf_gap_position2[1]])
+        dist = a.DistancePointLine(tf_now_position, [tf_gap_position[0], tf_gap_position[1], tf_gap_position2[0], tf_gap_position2[1]])
         self.twist.angular.z = self.p * dist
         vx = current_vel[0]
         vy = current_vel[1]
@@ -346,9 +347,10 @@ class Controller:
 
 
 class markerGen():
-    def __init__(self):
+    def __init__(self,current_position,goal_position,current_vel,goal_vel,current_cmd_vel):
         self.markerPointPub = rospy.Publisher("/markerPointPub", Marker, queue_size=1)
-        self.markerPub = rospy.Publisher("/markerPub",MarkerArray,queue_size=10)
+        self.markerPub = rospy.Publisher("/markerPub", MarkerArray, queue_size=10)
+
         self.robotGoalMarker = MarkerArray()
         self.robotPoseMarker = MarkerArray()
         self.robotVelMarker = MarkerArray()
@@ -371,7 +373,6 @@ class markerGen():
         self.markerID = 0
         self.colorID = 0
         while not rospy.is_shutdown():
-
             self.markerPub.publish(self.robotPoseMarker)
             self.markerPub.publish(self.robotVelMarker)
             self.markerPub.publish(self.robotGoalMarker)
@@ -384,10 +385,9 @@ class Detector:
         self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
         self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
         # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
-        self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=5,
-                                                                        slop=0.1)
+        self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=5, slop=0.1)
         self.measurements.registerCallback(self.measurements_callback)
-        self.odom_sub = rospy.Subscriber('camera/odom/sample',Odometry,self.odom_callback,queue_size=5)
+        self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
         # self.mgs_sub = rospy.Subscriber('mag_track_pos',roboteq_motor_controller_driver/channel_values,self.mgs_callback,queue_size=5)
         self.cmd_vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=5)
         # T265 parameters
@@ -403,7 +403,7 @@ class Detector:
         self.Knew1[(0, 1), (0, 1)] = 1 * self.Knew1[(0, 1), (0, 1)]
         self.R = np.eye(3)
         self.t = np.array([0.15, -0.03, 0.15])
-        self.detection_pub = rospy.Publisher("/detected_line",PoseStamped,queue_size=1)
+        self.detection_pub = rospy.Publisher("/detected_line", PoseStamped, queue_size=1)
         self.mgs = 1
         self.last_trans = []
         self.last_theta = []
@@ -426,7 +426,6 @@ class Detector:
                 except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                     continue
 
-
             else:
                 try:
                     self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
@@ -440,19 +439,20 @@ class Detector:
                 except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                     continue
 
-    def odom_callback(self,msg):
+    def odom_callback(self, msg):
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         theta = msg.twist.twist.angular.z
-        self.current_v = [vx,vy]
+        self.current_v = [vx, vy]
         self.current_theta = theta
+
+
 
     def measurements_callback(self, img1, img2):
         cv_image1 = self.bridge.imgmsg_to_cv2(img1, desired_encoding='bgr8')
         cv_image2 = self.bridge.imgmsg_to_cv2(img2, desired_encoding='bgr8')
         img_undistorted = cv2.fisheye.undistortImage(cv_image1, self.K1, D=self.D1, Knew=self.Knew1)
         img_undistorted = cv2.cvtColor(img_undistorted, cv2.COLOR_BGR2GRAY)
-
         # https://github.com/smidm/opencv-python-fisheye-example/blob/master/fisheye_example.py
         img_undistorted = cv2.GaussianBlur(img_undistorted, (5, 5), 1)
         # cv2.imshow("Image window", img_undistorted)
@@ -478,26 +478,24 @@ class Detector:
         # target_pose.pose.position.y = goal[1]
         # target_pose.pose.position.z = goal[2]
         # # target_pose.pose.orientation.x = quaternion_from_euler(0, 0, yaw)
-        #
-
         print("goal", goal)
 
         controller_object = Controller()
         if any(goal):
-            current_p = [self.trans.transform.translation.x,self.trans.transform.translation.y]
-            target_v = [self.current_v[0] * np.cos(goal[3]),self.current_v[0] * np.sin(goal[3])]
-            result = controller_object.find_goal(current_p, self.current_v, [goal[0],goal[1]], target_v, 1,goal[3])
+            current_p = [self.trans.transform.translation.x, self.trans.transform.translation.y]
+            target_v = [self.current_v[0] * np.cos(goal[3]), self.current_v[0] * np.sin(goal[3])]
+            result = controller_object.find_goal(current_p, self.current_v, [goal[0], goal[1]], target_v, 1, goal[3])
         else:
             # if is self.last_trans:
             # last_tran = [0,0,0]
-            result = controller_object.straight_line_follower(self.last_trans,self.trans,self.current_v)
+            result = controller_object.straight_line_follower(self.last_trans, self.trans, self.current_v)
 
         self.twist = result
-        robotPose = [0,0]
-        self.poseList = robotPose
-        self.robotPoseMarker = MarkerArray()
-        self.robotVelMarker = MarkerArray()
-        self.robotObsMarker = MarkerArray()
+
+        current_v = [self.current_v[0],self.current_v[1],self.current_theta]
+        goal_vel_theta = goal[3]
+        rviz_sim = markerGen([0,0], [goal[0],goal[1]], current_v,goal_vel_theta,result)
+
 
 
         # self.twist.linear.x = vx
@@ -596,7 +594,7 @@ class Detector:
             X,Y,Z = Z,-X,-Y
             X2,Y2,Z2 = Z2, -X2, -Y2
 
-            if np.abs(X2-X)<0.1:
+            if np.abs(X2-X) < 0.1:
                 theta = 0
             else:
                 theta = np.arctan((Y2-Y)/(X2-X))
