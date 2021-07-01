@@ -213,10 +213,15 @@ class Controller:
             x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,self.v1)
             y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,self.v1)
             expected_time = self.convolve_and_sum(x_params, y_params, dist_min)
-            goal_x = x_params * np.array([1, expected_time, expected_time ** 2, expected_time ** 3])
-            goal_y = y_params * np.array([1, expected_time, expected_time ** 2, expected_time ** 3])
-            vx = x_params * np.array([0, 1, 2 * expected_time, 3 * expected_time ** 2])
-            vy = y_params * np.array([0, 1, 2 * expected_time, 3 * expected_time ** 2])
+            x_params = np.reshape(x_params,4)
+            y_params = np.reshape(y_params,4)
+            goal_x = np.matmul(x_params , np.array([1, expected_time, expected_time ** 2, expected_time ** 3]))
+            goal_y = np.matmul(y_params , np.array([1, expected_time, expected_time ** 2, expected_time ** 3]))
+            print("x_params",x_params,"y_params",y_params)
+            vx = np.matmul(x_params , np.array([0, 1, 2 * expected_time, 3 * expected_time ** 2]))
+            vy = np.matmul(y_params , np.array([0, 1, 2 * expected_time, 3 * expected_time ** 2]))
+            print("vx,vy",vx,vy)
+
             if vx > 0:
                 theta = np.arctan(vy / vx)
             elif vx == 0:
@@ -347,13 +352,12 @@ class Controller:
 
 
 class markerGen():
-    def __init__(self,current_position,goal_position,current_vel,goal_vel,current_cmd_vel):
+    def __init__(self,current_position,goal_position,current_vel,goal_vel_theta,current_cmd_vel):
         self.markerPointPub = rospy.Publisher("/markerPointPub", Marker, queue_size=1)
         self.markerPub = rospy.Publisher("/markerPub", MarkerArray, queue_size=10)
 
         self.robotGoalMarker = MarkerArray()
         self.robotPoseMarker = MarkerArray()
-        self.robotVelMarker = MarkerArray()
         self.markerID = 0
         self.colorID = 0
         self.colorDict = {
@@ -371,12 +375,50 @@ class markerGen():
             11:[0,128,0]
         }
         self.markerID = 0
-        self.colorID = 0
-        while not rospy.is_shutdown():
-            self.markerPub.publish(self.robotPoseMarker)
-            self.markerPub.publish(self.robotVelMarker)
-            self.markerPub.publish(self.robotGoalMarker)
-            rospy.sleep(0.2)
+
+
+        for i in range(2):
+            if i == 0:
+                theta = 0
+                position = current_position
+                color_num = 2
+            else:
+                theta = goal_vel_theta
+                position = goal_position
+                color_num = 3
+            robotPose_marker = Marker()
+            robotPose_marker.header.frame_id = "/camera_pose_frame"
+            robotPose_marker.type = Marker.ARROW
+            robotPose_marker.ns = "Arrows"
+            robotPose_marker.id = self.markerID
+            self.markerID+=1
+            # robotPose_marker.action = marker.ADD
+            robotPose_marker.scale.x = 0.5
+            robotPose_marker.scale.y = 0.05
+            robotPose_marker.scale.z = 0.05
+            robotPose_marker.color.a = 1.0
+            robotPose_marker.color.r = self.colorDict[color_num][0]
+            robotPose_marker.color.g = self.colorDict[color_num][1]
+            robotPose_marker.color.b = self.colorDict[color_num][2]
+            robotPose_marker.pose.orientation.w = 1.0
+            robotPose_marker.pose.position.x = position[0]
+            robotPose_marker.pose.position.y = position[1]
+            robotPose_marker.pose.position.z = 0
+            [x,y,z,w] = quaternion_from_euler(0,0,theta)
+            robotPose_marker.pose.orientation.x = x
+            robotPose_marker.pose.orientation.y = y
+            robotPose_marker.pose.orientation.z = z
+            robotPose_marker.pose.orientation.w = w
+            self.robotPoseMarker.markers.append(robotPose_marker)
+
+        self.markerPub.publish(self.robotPoseMarker)
+        # self.markerPub.publish(self.robotGoalMarker)
+
+
+
+
+
+
 
 class Detector:
     def __init__(self):
