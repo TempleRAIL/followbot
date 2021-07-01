@@ -423,6 +423,7 @@ class markerGen():
 class Detector:
     def __init__(self):
         self.twist = Twist()
+        self.lidar_flag = 0
         self.bridge = cv_bridge.CvBridge()
         self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
         self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
@@ -430,6 +431,8 @@ class Detector:
         self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=5, slop=0.1)
         self.measurements.registerCallback(self.measurements_callback)
         self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
+        self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',roboteq_motor_controller_driver/channel_values,self.lidar_front_callback,queue_size = 5)
+        self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',roboteq_motor_controller_driver/channel_values,self.lidar_back_callback,queue_size = 5)
         # self.mgs_sub = rospy.Subscriber('mag_track_pos',roboteq_motor_controller_driver/channel_values,self.mgs_callback,queue_size=5)
         self.cmd_vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=5)
         # T265 parameters
@@ -480,6 +483,33 @@ class Detector:
                         self.last_theta = self.theta
                 except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                     continue
+
+
+
+    def lidar_front_callback(self,msg):
+        if not any(msg.value):
+            self.twist.angular.z = 0
+            self.twist.angular.y = 0
+            self.twist.angular.x = 0
+            self.twist.linear.x = 0
+            self.twist.linear.y = 0
+            self.twist.linear.z = 0
+            self.lidar_flag = 0
+        else:
+            self.lidar_flag = 1
+
+    def lidar_back_callback(self,msg):
+        if not any(msg.value):
+            self.twist.angular.z = 0
+            self.twist.angular.y = 0
+            self.twist.angular.x = 0
+            self.twist.linear.x = 0
+            self.twist.linear.y = 0
+            self.twist.linear.z = 0
+            self.lidar_flag = 0
+        else:
+            self.lidar_flag = 1
+
 
     def odom_callback(self, msg):
         vx = msg.twist.twist.linear.x
@@ -537,9 +567,8 @@ class Detector:
         current_v = [self.current_v[0],self.current_v[1],self.current_theta]
         goal_vel_theta = goal[3]
         rviz_sim = markerGen([0,0], [goal[0],goal[1]], current_v,goal_vel_theta,result)
-
-
-
+        if self.lidar_flag == 1:
+            self.cmd_vel_pub.publish(self.twist)
         # self.twist.linear.x = vx
         # self.twist.angular.z = w
         # self.cmd_vel_pub.publish(self.twist)
@@ -640,7 +669,6 @@ class Detector:
                 theta = 0
             else:
                 theta = np.arctan((Y2-Y)/(X2-X))
-
             result = np.array([X/ 1000.0, Y/ 1000.0, Z/ 1000.0,theta])
         return result
 
