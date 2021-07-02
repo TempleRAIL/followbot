@@ -210,6 +210,7 @@ class Controller:
         xf, yf = np.array(final_p)
         vxf, vyf = np.array([self.v1*np.cos(final_theta),self.v1*np.sin(final_theta)])
         min_circle_time = dist_min/self.v1
+        minimum_time = 0.1
         if np.sqrt(xf ** 2 + yf ** 2) >= dist_min:
             x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,self.v1)
             y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,self.v1)
@@ -227,14 +228,26 @@ class Controller:
             else:
                 theta = np.arctan(vy/vx)
 
+            vx2 = np.matmul(x_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
+            vy2 = np.matmul(y_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
+            if vx2 <= 0.01:
+                theta2 = np.pi/2
+            else:
+                theta2 = np.arctan(vy2/vx2)
         else:
             goal_x = xf
             goal_y = yf
             theta = final_theta
+            vx2 = self.v1
+            vy2 = 0
+            theta2 = final_theta
 
         [v, w, case_label] = self.pure_persuit(goal_x, goal_y, theta)  # to be changed with proportional control
+
         self.twist.linear.x = v
         self.twist.angular.z = w
+
+        self.cubic_poly_gap(current_vel, vx2, vy2, theta2,0.1)
         return self.twist
 
     def cubic_poly_motion_planning(self, currentp, current_vel, finalp, final_vel, avg_vel):
@@ -261,7 +274,7 @@ class Controller:
         y_a_convolve = np.convolve(y_a, y_a)
         # print("x_a_convolve",x_a_convolve,"y_a_convolve",y_a_convolve)
         poly_param = x_a_convolve + y_a_convolve
-        poly_param[-1] = poly_param[-1] - dist_min**2
+        poly_param[-1] = poly_param[-1] - dist_min ** 2
         # print("poly_param",poly_param)
         approximate_time = np.roots(poly_param)
         temp = []
@@ -335,8 +348,9 @@ class Controller:
         self.twist.linear.x = vx
 
 
-
-
+    def cubic_poly_gap(self,current_vel, vx, vy, theta,dt):
+        self.twist.angular.z = theta/dt
+        self.twist.linear.x = current_vel + 0.2*( vx - current_vel)
 
 class markerGen():
     def __init__(self,current_position,goal_position,current_vel,goal_vel_theta,current_cmd_vel):
