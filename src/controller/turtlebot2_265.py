@@ -204,48 +204,35 @@ class Controller:
         self.current_v = []
         self.current_theta = []
 
-    def find_goal(self, current_p, current_vel, final_p, final_vel, dist_min,final_theta):
+    def find_goal(self, current_p, current_vel, final_p, dist_min,final_theta):
         x0, y0 = np.array(current_p)
         vx0, vy0 = np.array(current_vel)  # vx = vel, vy = 0
         xf, yf = np.array(final_p)
-        vxf, vyf = np.array(final_vel)
+        vxf, vyf = np.array([self.v1*np.cos(final_theta),self.v1*np.sin(final_theta)])
+        min_circle_time = dist_min/self.v1
         if np.sqrt(xf ** 2 + yf ** 2) >= dist_min:
             x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,self.v1)
             y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,self.v1)
-            expected_time = self.convolve_and_sum(x_params, y_params, dist_min)
+            # expected_time = self.convolve_and_sum(x_params, y_params, dist_min)
+            expected_time = 1.2 * np.sqrt(xf**2+yf**2)/self.v1
             x_params = np.reshape(x_params,4)
             y_params = np.reshape(y_params,4)
-            goal_x = np.matmul(x_params , np.array([1, expected_time, expected_time ** 2, expected_time ** 3]))
-            goal_y = np.matmul(y_params , np.array([1, expected_time, expected_time ** 2, expected_time ** 3]))
+            goal_x = np.matmul(x_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
+            goal_y = np.matmul(y_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
             print("x_params",x_params,"y_params",y_params)
-            vx = np.matmul(x_params , np.array([0, 1, 2 * expected_time, 3 * expected_time ** 2]))
-            vy = np.matmul(y_params , np.array([0, 1, 2 * expected_time, 3 * expected_time ** 2]))
-            print("vx,vy",vx,vy)
-
-            if vx > 0:
-                theta = np.arctan(vy / vx)
-            elif vx == 0:
-                theta = np.pi / 2
+            vx = np.matmul(x_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
+            vy = np.matmul(y_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
+            if vx <= 0.01:
+                theta = np.pi/2
             else:
-                if vy >= 0:
-                    theta = np.pi - np.arctan(vy / np.abs(vx))
-                else:
-                    theta = np.pi + np.arctan(np.abs(vy) / np.abs(vx))
+                theta = np.arctan(vy/vx)
+
         else:
             goal_x = xf
             goal_y = yf
+            theta = final_theta
 
-            if vyf > 0:
-                theta = np.arctan(vyf / vxf)
-            elif vyf == 0:
-                theta = np.pi / 2
-            else:
-                if vyf >= 0:
-                    theta = np.pi - np.arctan(vyf / np.abs(vxf))
-                else:
-                    theta = np.pi + np.arctan(np.abs(vyf) / np.abs(vxf))
-        goal_pose = [goal_x, goal_y, theta]
-        [v, w, case_label] = self.pure_persuit(goal_pose)  # to be changed with proportional control
+        [v, w, case_label] = self.pure_persuit(goal_x, goal_y, theta)  # to be changed with proportional control
         self.twist.linear.x = v
         self.twist.angular.z = w
         return self.twist
@@ -285,9 +272,8 @@ class Controller:
         print("np.min(temp)",np.min(temp))
         return np.min(temp)
 
-    def pure_persuit(self, goal_pose):
+    def pure_persuit(self, gx, gy, gtheta):
         # pure_persuit is under robot frame.
-        [gx, gy, gtheta] = goal_pose
         dist = np.sqrt(gx ** 2 + gy ** 2)
         fai = np.arcsin(gy / dist)
         case_label = 0
@@ -329,8 +315,7 @@ class Controller:
             w_cmd = w_cmd * (self.v4 / u)
         return (v_cmd, w_cmd, case_label)
 
-    def straight_line_follower(self,tf_gap,tf_now,current_vel):
-
+    def straight_line_follower(self,tf_gap,tf_now):
         tf_gap_theta = euler_from_quaternion([tf_gap.transform.rotation.x,
                                          tf_gap.transform.rotation.y,
                                          tf_gap.transform.rotation.z,
@@ -346,9 +331,11 @@ class Controller:
         a = HoughBundler()
         dist = a.DistancePointLine(tf_now_position, [tf_gap_position[0], tf_gap_position[1], tf_gap_position2[0], tf_gap_position2[1]])
         self.twist.angular.z = self.p * dist
-        vx = current_vel[0]
-        vy = current_vel[1]
+        vx = self.v1
         self.twist.linear.x = vx
+
+
+
 
 
 class markerGen():
@@ -423,7 +410,6 @@ class markerGen():
 class Detector:
     def __init__(self):
         self.twist = Twist()
-        self.lidar_flag = 0
         self.bridge = cv_bridge.CvBridge()
         self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
         self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
@@ -431,10 +417,8 @@ class Detector:
         self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=5, slop=0.1)
         self.measurements.registerCallback(self.measurements_callback)
         self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
-        self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',roboteq_motor_controller_driver/channel_values,self.lidar_front_callback,queue_size = 5)
-        self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',roboteq_motor_controller_driver/channel_values,self.lidar_back_callback,queue_size = 5)
         # self.mgs_sub = rospy.Subscriber('mag_track_pos',roboteq_motor_controller_driver/channel_values,self.mgs_callback,queue_size=5)
-        self.cmd_vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=5)
+        self.gap_vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=5)
         # T265 parameters
         self.PPX1 = 419.467010498047
         self.PPY1 = 386.97509765625
@@ -484,33 +468,6 @@ class Detector:
                 except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                     continue
 
-
-
-    def lidar_front_callback(self,msg):
-        if not any(msg.value):
-            self.twist.angular.z = 0
-            self.twist.angular.y = 0
-            self.twist.angular.x = 0
-            self.twist.linear.x = 0
-            self.twist.linear.y = 0
-            self.twist.linear.z = 0
-            self.lidar_flag = 0
-        else:
-            self.lidar_flag = 1
-
-    def lidar_back_callback(self,msg):
-        if not any(msg.value):
-            self.twist.angular.z = 0
-            self.twist.angular.y = 0
-            self.twist.angular.x = 0
-            self.twist.linear.x = 0
-            self.twist.linear.y = 0
-            self.twist.linear.z = 0
-            self.lidar_flag = 0
-        else:
-            self.lidar_flag = 1
-
-
     def odom_callback(self, msg):
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
@@ -555,20 +512,21 @@ class Detector:
         controller_object = Controller()
         if any(goal):
             current_p = [self.trans.transform.translation.x, self.trans.transform.translation.y]
-            target_v = [self.current_v[0] * np.cos(goal[3]), self.current_v[0] * np.sin(goal[3])]
-            result = controller_object.find_goal(current_p, self.current_v, [goal[0], goal[1]], target_v, 1, goal[3])
+            # target_v = [self.current_v[0] * np.cos(goal[3]), self.current_v[0] * np.sin(goal[3])]
+            result = controller_object.find_goal(current_p, self.current_v, [goal[0], goal[1]], 1, goal[3])
         else:
             # if is self.last_trans:
             # last_tran = [0,0,0]
-            result = controller_object.straight_line_follower(self.last_trans, self.trans, self.current_v)
+            result = controller_object.straight_line_follower(self.last_trans, self.trans)
 
         self.twist = result
-
+        print("self.twist.linear.x,self.twist.angular.z",self.twist.linear.x,self.twist.angular.z)
         current_v = [self.current_v[0],self.current_v[1],self.current_theta]
         goal_vel_theta = goal[3]
         rviz_sim = markerGen([0,0], [goal[0],goal[1]], current_v,goal_vel_theta,result)
-        if self.lidar_flag == 1:
-            self.cmd_vel_pub.publish(self.twist)
+        self.gap_vel_pub.publish(self.twist)
+
+
         # self.twist.linear.x = vx
         # self.twist.angular.z = w
         # self.cmd_vel_pub.publish(self.twist)
@@ -669,6 +627,7 @@ class Detector:
                 theta = 0
             else:
                 theta = np.arctan((Y2-Y)/(X2-X))
+
             result = np.array([X/ 1000.0, Y/ 1000.0, Z/ 1000.0,theta])
         return result
 
