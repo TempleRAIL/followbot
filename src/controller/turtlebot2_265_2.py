@@ -28,7 +28,7 @@ from geometry_msgs.msg import PoseStamped
 from interactive_markers.interactive_marker_server import *
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
-
+from skimage.transform import hough_line, hough_line_peaks
 
 
 class HoughBundler:
@@ -129,7 +129,6 @@ class HoughBundler:
         """Sort lines cluster and return first and last coordinates
         """
         orientation = self.get_orientation(lines[0])
-        print("orientation",orientation)
         # special case
         if (len(lines) == 1):
             return [lines[0][:2], lines[0][2:]]
@@ -141,7 +140,7 @@ class HoughBundler:
             points.append(line[2:])
         # if vertical
 
-        if 60 < orientation < 120:
+        if 45 < orientation < 135:
             # sort by y
             points = sorted(points, key=lambda point: point[1])
         else:
@@ -164,7 +163,7 @@ class HoughBundler:
         for line_i in [l for l in lines]:
             orientation = self.get_orientation(line_i)
             # if vertical
-            if 60 < orientation < 120:
+            if 45 < orientation < 135:
                 lines_y.append(line_i)
             else:
                 lines_x.append(line_i)
@@ -215,7 +214,7 @@ class Controller:
             x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,self.v1)
             y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,self.v1)
             min_circle_time = self.convolve_and_sum(x_params, y_params, dist_min)
-            print("min_circle_time",min_circle_time)
+            # print("min_circle_time",min_circle_time)
             if min_circle_time == -1:
                 min_circle_time = 1.2 * np.sqrt(xf**2+yf**2)/self.v1
             x_params = np.reshape(x_params,4)
@@ -235,7 +234,7 @@ class Controller:
             goal_y = yf
             theta = final_theta
 
-        [v, w, case_label] = self.pure_persuit(goal_x, goal_y, theta)  # to be changed with proportional control
+        [v, w] = self.calculate_velocity([goal_x, goal_y])  # to be changed with proportional control
         self.twist.linear.x = v
         self.twist.angular.z = w
         return self.twist
@@ -251,12 +250,10 @@ class Controller:
         a1 = v0
         M = np.array([[dt ** 2, dt ** 3], [2 * dt, 3 * dt ** 2]])
         a2, a3 =np.matmul( np.linalg.inv(M) , np.array([pf - a0 - dt * a1, vf - a1]))#here is a problem
-        print("dt",dt,"a0",a0,"a1",a1,"a2",a2,"a3",a3)
+        # print("dt",dt,"a0",a0,"a1",a1,"a2",a2,"a3",a3)
         return [list(a0), list(a1), list(a2), list(a3)]
 
     def convolve_and_sum(self, x_a, y_a, dist_min):
-        # x_a = np.reshape(x_a,(1,4))
-        # y_a = np.reshape(y_a,(1,4))
         x_a = np.reshape(x_a,4)
         y_a = np.reshape(y_a,4)
         x_a_convolve = np.convolve(x_a, x_a)
@@ -267,9 +264,8 @@ class Controller:
         # print("poly_param",poly_param)
         [low_bound,up_bound] = self.init_binary_search(poly_param)
         while np.abs(low_bound - up_bound) > 0.1:
-
             [low_bound,up_bound] = self.binary_search(poly_param,low_bound,up_bound)
-            print("np.abs(low_bound - up_bound)",np.abs(low_bound - up_bound),low_bound,up_bound)
+            # print("np.abs(low_bound - up_bound)",np.abs(low_bound - up_bound),low_bound,up_bound)
             if up_bound == -1:
                 break
             elif np.abs(low_bound - up_bound) < 0.1:
@@ -308,7 +304,7 @@ class Controller:
         t = (low_bound + up_bound) / 2.0
         t0 = low_bound
         t1 = up_bound
-        print("t0,t,t1",t0,t,t1)
+        # print("t0,t,t1",t0,t,t1)
         low_value = np.dot(np.array([1,t0,t0**2,t0**3,t0**4,t0**5,t0**6]),poly_param)
         high_value = np.dot(np.array([1,t1,t1**2,t1**3,t1**4,t1**5,t1**6]),poly_param)
         mid_value = np.dot(np.array([1,t,t**2,t**3,t**4,t**5,t**6]),poly_param)
@@ -349,49 +345,6 @@ class Controller:
         return (v, w)
 
 
-    def pure_persuit(self, gx, gy, gtheta):
-        # pure_persuit is under robot frame.
-        dist = np.sqrt(gx ** 2 + gy ** 2)
-        fai = np.arcsin(gy / dist)
-        case_label = 0
-        if fai > 0:
-            if gtheta > fai and gtheta <= np.pi / 2 - fai:
-                R = (dist / 2) / np.sin(fai / 2)
-                v_cmd = self.v_turn
-                w_cmd = v_cmd / R
-                case_label = 1
-            elif gtheta >= np.pi / 2 - fai and gtheta <= np.pi / 2 + fai:
-                v_cmd = 0
-                w_cmd = self.max_turning_omega
-                case_label = 2
-            else:
-                R = dist / 2
-                v_cmd = self.v_turn
-                w_cmd = 0.5 * fai / (dist / self.v_turn)
-                case_label = 3
-        else:
-            if gtheta >= 3 * np.pi / 2 and gtheta < 2 * np.pi - np.abs(fai):
-                R = (dist / 2) / np.abs(np.sin(fai / 2))
-                v_cmd = self.v_turn
-                w_cmd = -v_cmd / R
-                case_label = 4
-            elif gtheta > 3 * np.pi / 2 - np.abs(fai) and gtheta <= 3 * np.pi / 2:
-                v_cmd = 0
-                w_cmd = -self.max_turning_omega
-                case_label = 5
-            else:
-                R = dist / 2
-                v_cmd = self.v_turn
-                w_cmd = 0.5 * fai / (dist / self.v_turn)
-                case_label = 6
-        print("gx,gy", [gx, gy], "fai", fai, "gtheta", gtheta, "case_label", case_label)
-        L = self.wheel_base
-        u = max(v_cmd + L * w_cmd * 1, v_cmd - L * w_cmd * 1)
-        if u > self.v4:
-            v_cmd = v_cmd * (self.v4 / u)
-            w_cmd = w_cmd * (self.v4 / u)
-        return (v_cmd, w_cmd, case_label)
-
     def straight_line_follower(self,tf_gap,tf_now):
         tf_gap_theta = euler_from_quaternion([tf_gap.transform.rotation.x,
                                          tf_gap.transform.rotation.y,
@@ -410,6 +363,9 @@ class Controller:
         self.twist.angular.z = self.p * dist
         vx = self.v1
         self.twist.linear.x = vx
+
+    def cmd_vel_tf(self,tf_info,cmd_vel):
+        print("tf_info")
 
 
 
@@ -554,31 +510,22 @@ class Detector:
         cv_image2 = self.bridge.imgmsg_to_cv2(img2, desired_encoding='bgr8')
         img_undistorted = cv2.fisheye.undistortImage(cv_image1, self.K1, D=self.D1, Knew=self.Knew1)
         img_undistorted = cv2.cvtColor(img_undistorted, cv2.COLOR_BGR2GRAY)
-        # https://github.com/smidm/opencv-python-fisheye-example/blob/master/fisheye_example.py
-        # img_undistorted = cv2.GaussianBlur(img_undistorted, (5, 5), 1)
-        # cv2.imshow("Image window", img_undistorted)
-        # cv2.waitKey(0)
-        medianBlur_img = cv2.medianBlur(img_undistorted, 5)
-        kernel_dialate = np.ones((3, 3), np.uint8)
-        dialate_img = cv2.dilate(img_undistorted, kernel_dialate, iterations=1)
-        kernel_erosion = np.ones((5, 5), np.uint8)
-        erosion_img = cv2.erode(img_undistorted, kernel_erosion, iterations=1)
-        (thresh, im_bw) = cv2.threshold(medianBlur_img, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-
-        im_bw[0:int(self.PPY1),:] = 0
-        edges = cv2.Canny(im_bw, 128, 255)
-        temp_lines = probabilistic_hough_line(edges, threshold=10, line_length=30, line_gap=10)
-
+        blur = cv2.GaussianBlur(img_undistorted,(5,5),0)
+        (thresh, im_bw2) = cv2.threshold(blur, 0, 127,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        im_bw2[0:int(self.PPY1),:] = 0
+        edges = cv2.Canny(im_bw2, 0,127) # with the black&white image, any value seems to be fine
+        # tested_angles = np.linspace(-np.pi / 2, np.pi / 2, 360, endpoint=False)
+        # h, theta, d = hough_line(edges, theta=tested_angles)
+        prob_hough_lines = probabilistic_hough_line(edges, threshold=30, line_length=25, line_gap=10)
         new_lines = []
-        for line in temp_lines:
+        for line in prob_hough_lines:
             p0, p1 = line
-            if p0[1] > self.Fy1 and p1[1] > self.Fy1:
-                new_lines.append((p0[0], p0[1], p1[0], p1[1]))
+            new_lines.append((p0[0], p0[1], p1[0], p1[1]))
 
         a = HoughBundler()
         foo = a.process_lines(new_lines, edges)
-        [goal,theta_lines] = self.XY_2_XYZ_Goal(foo, img_undistorted)
-
+        [goal,theta_lines] = self.XY_2_XYZ_Goal(foo, img_undistorted.shape)
+        lines2 = self.theta_filter(foo)
         # target_pose = PoseStamped()
         # target_pose.pose.position.x = goal[0]
         # target_pose.pose.position.y = goal[1]
@@ -592,8 +539,6 @@ class Detector:
             # target_v = [self.current_v[0] * np.cos(goal[3]), self.current_v[0] * np.sin(goal[3])]
             result = controller_object.find_goal(current_p, self.current_v, [goal[0], goal[1]], 0.2, goal[3])
         else:
-            # if is self.last_trans:
-            # last_tran = [0,0,0]
             result = controller_object.straight_line_follower(self.last_trans, self.trans)
 
         self.twist = result
@@ -603,17 +548,11 @@ class Detector:
         rviz_sim = markerGen([0,0], [goal[0]+0.15,goal[1]], current_v,goal_vel_theta,result)
         self.gap_vel_pub.publish(self.twist)
 
-
-
-        # self.twist.linear.x = vx
-        # self.twist.angular.z = w
-        # self.cmd_vel_pub.publish(self.twist)
-        # print("goal_vel_theta",goal_vel_theta)
         # if np.abs(goal_vel_theta) > 1:
+        print("len(lines2)",len(lines2),"len(foo)",len(foo))
         # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
         #                          sharex=True, sharey=True)
         # ax = axes.ravel()
-
         # ax[0].imshow(cv_image1, cmap='gray', vmin=0, vmax=255)
         # ax[0].axis('off')
         # ax[0].set_title('fisheye', fontsize=20)
@@ -621,92 +560,146 @@ class Detector:
         # ax[0].axis('off')
         # ax[0].set_title('img_undistorted', fontsize=20)
         #
-        # ax[1].imshow(dialate_img, cmap='gray', vmin=0, vmax=255)
+        # ax[1].imshow(im_bw2 , cmap='gray', vmin=0, vmax=255)
         # ax[1].axis('off')
-        # ax[1].set_title('dialate_img', fontsize=20)
-        #
-        # ax[2].imshow(medianBlur_img , cmap='gray', vmin=0, vmax=255)
-        # ax[2].axis('off')
-        # ax[2].set_title('medianBlur_img ', fontsize=20)
-        #
-        #
-        # ax[3].imshow(edges, cmap='gray', vmin=0, vmax=255)
-        # ax[3].axis('off')
-        # ax[3].set_title('edges', fontsize=20)
-        #
-        # ax[4].imshow(edges * 0, cmap='gray')
-        # for line in temp_lines:
-        #     p0, p1 = line
-        #     ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
-        # ax[4].set_xlim((0, img_undistorted.shape[1]))
-        # ax[4].set_ylim((img_undistorted.shape[0], 0))
-        # ax[4].set_title('Probabilistic Hough')
+        # ax[1].set_title('gaussianBlur_img ', fontsize=20)
         #
         # ax[5].imshow(edges * 0, cmap='gray')
-        # for line in foo:
+        # for line in lines2:
         #     p0, p1 = line
         #     ax[5].plot((p0[0], p1[0]), (p0[1], p1[1]))
         #     ax[5].plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
-        # # print("np.array([goal[0],goal[4]]),np.array([goal[1],goal[5]])", np.array([goal[0],goal[4]]),np.array([goal[1],goal[5]]))
+        #
         # ax[5].scatter(np.array([goal[7][0],goal[8][0]]),np.array([goal[7][1],goal[8][1]]),s=100,c='r', marker ="+")
         # ax[5].set_xlim((0, img_undistorted.shape[1]))
         # ax[5].set_ylim((img_undistorted.shape[0], 0))
         # ax[5].set_title('Merged Probabilistic Hough')
         #
+        #
+        # ax[2].imshow(edges, cmap='gray', vmin=0, vmax=255)
+        # ax[2].axis('off')
+        # ax[2].set_title('edges', fontsize=20)
+        #
+        # ax[3].imshow(edges * 0, cmap='gray')
+        # for line in prob_hough_lines:
+        #     p0, p1 = line
+        #     ax[3].plot((p0[0], p1[0]), (p0[1], p1[1]))
+        # ax[3].set_xlim((0, img_undistorted.shape[1]))
+        # ax[3].set_ylim((img_undistorted.shape[0], 0))
+        # ax[3].set_title('Probabilistic Hough')
+        #
+        # ax[4].imshow(edges * 0, cmap='gray')
+        # for line in foo:
+        #     p0, p1 = line
+        #     ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
+        #     ax[4].plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
+        #
+        # ax[4].scatter(np.array([goal[7][0],goal[8][0]]),np.array([goal[7][1],goal[8][1]]),s=100,c='r', marker ="+")
+        # ax[4].set_xlim((0, img_undistorted.shape[1]))
+        # ax[4].set_ylim((img_undistorted.shape[0], 0))
+        # ax[4].set_title('Merged Probabilistic Hough')
+        #
         # fig.tight_layout()
         # plt.show()
-        # cv2.imshow("Image window", skeleton)
-        # cv2.waitKey(0)
+        # # cv2.imshow("Image window", skeleton)
+        # # cv2.waitKey(0)
 
     def theta_filter(self, lines):
         temp_lines = []
         for line in lines:
-            if line[1][0] - line[0][0] > 0.001:
+            if np.abs(line[1][0] - line[0][0]) > 0.001:
                 k = (line[0][1] - line[1][1]) / (line[0][0] - line[1][0])
             else:
                 k = np.Inf
+
             if np.abs(k) >= 1:
                 temp_lines.append(line)
+        print("temp_lines",temp_lines)
         return temp_lines
 
-    def XY_2_XYZ_Goal(self, lines, img_undistorted):
-        height, width = img_undistorted.shape
+    def img2ground(self,XY_goal):
+        Y = 150
+        Z = (self.Fy1 * Y) / (XY_goal[1] - self.PPY1)
+        X = -(XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
+        X,Y,Z = Z,-X,-Y
+        return X/ 1000.0,Y/1000.0,Z/1000.0
+
+
+
+    def XY_2_XYZ_Goal(self, lines, shape):
+        height, width = shape
         center_point = [(np.floor(width / 2), height - 1)]
         points_list = []
+        points_list2 = []
         lines = self.theta_filter(lines)
         if len(lines) == 0:
-            result = np.array([0, 0.15, 1, 0])
+            result = np.array([0.1, 0, -0.15, 0])
         else:
             for line in lines:
                 points_list.append(line[0])
                 points_list.append(line[1])
+                temp_X,temp_Y,temp_Z = self.img2ground(line[0])
+                points_list2.append((temp_X,temp_Y))
+                temp_X,temp_Y,temp_Z = self.img2ground(line[1])
+                points_list2.append((temp_X,temp_Y))
+            # print("points_list",points_list,"points_list2",points_list2)
             DIST = distance.cdist(np.array(points_list), np.array(center_point))
+            DIST2 = distance.cdist(np.array(points_list2), np.array([(0,0)]))
             index = np.where(DIST == DIST.min())
-            print("index",index,"DIST",DIST,"DIST.min()",DIST.min())
+            index2 = np.where(DIST2 == DIST2.min())
+            # print("index",index,"DIST",DIST,"DIST.min()",DIST.min())
+            # print("index2",index2,"DIST2",DIST2,"DIST2.min()",DIST2.min())
+
+
             if np.int(index[0])%2 == 0:
                 the_other_point = points_list[np.int(index[0]) + 1]
             else:
                 the_other_point = points_list[np.int(index[0]) - 1]
 
-            # print("lines", lines)
-            # print("DIST",DIST,"index",index,"center_point",center_point)
-            XY_goal = points_list[np.int(index[0])]
-            Y = 150
-            Z = (self.Fy1 * Y) / (XY_goal[1] - self.PPY1)
-            X = -(XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
-            XY_goal2 = the_other_point
-            Y2 = 150
-            Z2 = (self.Fy1 * Y) / (XY_goal2[1] - self.PPY1)
-            X2 = -(XY_goal2[0] - self.PPX1) / (self.Fx1 / Z)
-            # x = Z,y = -X, z = -Y
-            X,Y,Z = Z,-X,-Y
-            X2,Y2,Z2 = Z2, -X2, -Y2
+            if np.int(index2[0])%2 == 0:
+                the_other_point2 = points_list2[np.int(index2[0]) + 1]
+            else:
+                the_other_point2 = points_list2[np.int(index2[0]) - 1]
 
+
+
+            X = points_list2[np.int(index2[0])][0]
+            Y = -points_list2[np.int(index2[0])][1]
+            Z = -0.15
+            X2 = the_other_point2[0]
+            Y2 = -the_other_point2[1]
+            Z2 = -0.15
             if np.abs(X2-X) < 0.1:
                 theta = 0
             else:
                 theta = np.arctan((Y2-Y)/(X2-X))
-            result = np.array([X/ 1000.0, Y/ 1000.0, Z/ 1000.0,theta, X2/1000.0, Y2/1000.0, Z2/1000.0,XY_goal,XY_goal2])
+            result = np.array([ X,Y,Z,theta,X2,Y2,Z2])
+
+            # print("lines", lines)
+            # print("DIST",DIST,"index",index,"center_point",center_point)
+            # XY_goal = points_list[np.int(index[0])]
+            # Y = 150
+            # Z = (self.Fy1 * Y) / (XY_goal[1] - self.PPY1)
+            # X = -(XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
+            # XY_goal2 = the_other_point
+            # Y2 = 150
+            # Z2 = (self.Fy1 * Y) / (XY_goal2[1] - self.PPY1)
+            # X2 = -(XY_goal2[0] - self.PPX1) / (self.Fx1 / Z)
+            # # x = Z,y = -X, z = -Y
+            # X,Y,Z = Z,-X,-Y
+            # X2,Y2,Z2 = Z2, -X2, -Y2
+            #
+            # if np.abs(X2-X) < 0.1:
+            #     theta = 0
+            # else:
+            #     theta = np.arctan((Y2-Y)/(X2-X))
+            # result = np.array([X/ 1000.0, Y/ 1000.0, Z/ 1000.0,theta, X2/1000.0, Y2/1000.0, Z2/1000.0,XY_goal,XY_goal2])
+
+            # if np.abs(X2-X) < 0.1:
+            #     theta = 0
+            # else:
+            #     theta = np.arctan((Y2-Y)/(X2-X))
+            # result = np.array([X/ 1000.0, Y/ 1000.0, Z/ 1000.0,theta, X2/1000.0, Y2/1000.0, Z2/1000.0,XY_goal,XY_goal2])
         return [result,lines]
 
 
