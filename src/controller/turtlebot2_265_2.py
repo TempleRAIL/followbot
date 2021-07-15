@@ -29,7 +29,8 @@ from interactive_markers.interactive_marker_server import *
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 from skimage.transform import hough_line, hough_line_peaks
-
+from roboteq_motor_controller_driver.msg import channel_values
+from sensor_msgs.msg import CompressedImage
 
 class HoughBundler:
     '''Clasterize and merge each cluster of cv2.HoughLinesP() output
@@ -192,8 +193,8 @@ class Controller:
 
         self.wheel_base = rospy.get_param('~wheel_base',0.8)
         self.wheel_radius = rospy.get_param('~wheel_radius',0.2)
-        self.v_max = rospy.get_param('~v_max',0.5)
-        self.w_max = rospy.get_param('~w_max',0.2)
+        self.v_max = rospy.get_param('~v_max',0.3 + 0.4)
+        self.w_max = rospy.get_param('~w_max',0.8)
         self.scale_factor = 0.5 # from true world to simulation
         self.p = self.scale_factor*rospy.get_param('~p', -7.0) # proportional controller constant
         self.v1 = self.scale_factor * rospy.get_param('~v', 0.666)  # nominal velocity (1.49 MPH)
@@ -322,7 +323,7 @@ class Controller:
         R = np.dot(goal, goal) / (2. * goal[1])
 
         v_cmd = w_cmd = 0.
-        if R == 0:
+        if R < 0.05:
             v_cmd = 0.
             w_cmd = self.w_max / np.sign(R)
         elif np.isinf(R):
@@ -442,12 +443,8 @@ class Detector:
         self.bridge = cv_bridge.CvBridge()
         self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
         self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
+        self.image_pub = rospy.Publisher("/detection_result_umage",CompressedImage)
         # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
-        self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=5, slop=0.1)
-        self.measurements.registerCallback(self.measurements_callback)
-        self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
-        # self.mgs_sub = rospy.Subscriber('mag_track_pos',roboteq_motor_controller_driver/channel_values,self.mgs_callback,queue_size=5)
-        self.gap_vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=5)
         # T265 parameters
         self.PPX1 = 419.467010498047
         self.PPY1 = 386.97509765625
@@ -470,16 +467,16 @@ class Detector:
         rate = rospy.Rate(10.0)
         self.current_v = []
         self.current_theta = 0
-        self.vx_max = 1.0
-        self.az_max = 2.5
+        self.vx_max = 0.7
+        self.az_max = 0.85
+        self.lidar_flag = 0
         self.twist = Twist()
         self.bridge = cv_bridge.CvBridge()
         self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
         self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
         # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
-        self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=5, slop=0.1)
+        self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=15, slop=0.1)
         self.measurements.registerCallback(self.measurements_callback)
-        self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
 
         self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
         self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
@@ -586,14 +583,22 @@ class Detector:
         current_v = [self.current_v[0],self.current_v[1],self.current_theta]
         goal_vel_theta = goal[3]
         rviz_sim = markerGen([0,0], [goal[0]+0.15,goal[1]], current_v,goal_vel_theta,result)
-        self.twist.linear.x = self.twist.linear.x
-        self.twist.angular.z = -self.twist.angular.z * 1
+
+
+        if np.abs(self.twist.linear.x) <= 0.001:
+            self.twist.linear.x = 0
+            print("case_0")
+        else:
+            self.twist.linear.x = self.twist.linear.x + 0.35 * np.sign(self.twist.linear.x)
+            print("case_-1")
 
         if self.lidar_flag == 0:
             self.twist.linear.x = 0
             self.twist.angular.z = 0
+            print("case_1")
 
         if np.abs(self.twist.linear.x) > self.vx_max or np.abs(self.twist.angular.z) > self.az_max:
+            print("case_2")
             propotion1 = np.abs(self.vx_max)/self.twist.linear.x
             propotion2 = np.abs(self.twist.angular.z)/self.az_max
             propotion = max(propotion1,propotion2)
@@ -601,8 +606,14 @@ class Detector:
             self.twist.angular.z = self.twist.angular.z / propotion
 
         if np.abs(self.twist.linear.x) > self.vx_max or np.abs(self.twist.angular.z) > self.az_max:
+            print("case_3")
             self.twist.linear.x = 0
+            self.twist.linear.y = 0
+            self.twist.linear.z = 0
+            self.twist.angular.x = 0
+            self.twist.angular.y = 0
             self.twist.angular.z = 0
+
             print("error")
 
         self.gap_vel_pub.publish(self.twist)
@@ -731,6 +742,8 @@ class Detector:
                 theta = 0
             else:
                 theta = np.arctan((Y2-Y)/(X2-X))
+                if theta < 0:
+                    theta = theta + np.pi
             result = np.array([ X,Y,Z,theta,X2,Y2,Z2])
 
             # print("lines", lines)
