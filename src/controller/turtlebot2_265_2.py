@@ -347,15 +347,15 @@ class Controller:
 
     def straight_line_follower(self,tf_gap,tf_now):
         tf_gap_theta = euler_from_quaternion([tf_gap.transform.rotation.x,
-                                         tf_gap.transform.rotation.y,
-                                         tf_gap.transform.rotation.z,
-                                         tf_gap.transform.rotation.w])[2]
+                                              tf_gap.transform.rotation.y,
+                                              tf_gap.transform.rotation.z,
+                                              tf_gap.transform.rotation.w])[2]
         tf_gap_position = [tf_gap.transform.translation.x, tf_gap.transform.translation.y]
         tf_gap_position2 = [tf_gap.transform.translation.x + np.cos(tf_gap_theta), tf_gap.transform.translation.y + np.sin(tf_gap_theta)]
         tf_now_theta = euler_from_quaternion([tf_now.transform.rotation.x,
-                                         tf_now.transform.rotation.y,
-                                         tf_now.transform.rotation.z,
-                                         tf_now.transform.rotation.w])[2]
+                                              tf_now.transform.rotation.y,
+                                              tf_now.transform.rotation.z,
+                                              tf_now.transform.rotation.w])[2]
 
         tf_now_position = [tf_now.transform.translation.x, tf_now.transform.translation.y]
         a = HoughBundler()
@@ -470,15 +470,32 @@ class Detector:
         rate = rospy.Rate(10.0)
         self.current_v = []
         self.current_theta = 0
+        self.vx_max = 1.0
+        self.az_max = 2.5
+        self.twist = Twist()
+        self.bridge = cv_bridge.CvBridge()
+        self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
+        self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
+        # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
+        self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=5, slop=0.1)
+        self.measurements.registerCallback(self.measurements_callback)
+        self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
+
+        self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
+        self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
+        self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
+        self.gap_vel_pub = rospy.Publisher('/gap_cmd_vel', Twist, queue_size=5)
+
+
 
         while not rospy.is_shutdown():
             if self.mgs == 1:
                 try:
                     self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
                     self.theta = euler_from_quaternion([self.trans.transform.rotation.x,
-                                         self.trans.transform.rotation.y,
-                                         self.trans.transform.rotation.z,
-                                         self.trans.transform.rotation.w])[2]
+                                                        self.trans.transform.rotation.y,
+                                                        self.trans.transform.rotation.z,
+                                                        self.trans.transform.rotation.w])[2]
                     self.last_trans = []
                     self.last_theta = []
                 except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
@@ -488,9 +505,9 @@ class Detector:
                 try:
                     self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
                     self.theta = euler_from_quaternion([self.trans.transform.rotation.x,
-                                         self.trans.transform.rotation.y,
-                                         self.trans.transform.rotation.z,
-                                         self.trans.transform.rotation.w])[2]
+                                                        self.trans.transform.rotation.y,
+                                                        self.trans.transform.rotation.z,
+                                                        self.trans.transform.rotation.w])[2]
                     if not self.last_trans:
                         self.last_trans = self.trans
                         self.last_theta = self.theta
@@ -504,6 +521,29 @@ class Detector:
         self.current_v = [vx, vy]
         self.current_theta = theta
 
+    def lidar_front_callback(self,msg):
+        if any(msg.value):
+            self.twist.angular.z = 0
+            self.twist.angular.y = 0
+            self.twist.angular.x = 0
+            self.twist.linear.x = 0
+            self.twist.linear.y = 0
+            self.twist.linear.z = 0
+            self.lidar_flag = 0
+        else:
+            self.lidar_flag = 1
+
+    def lidar_back_callback(self,msg):
+        if any(msg.value):
+            self.twist.angular.z = 0
+            self.twist.angular.y = 0
+            self.twist.angular.x = 0
+            self.twist.linear.x = 0
+            self.twist.linear.y = 0
+            self.twist.linear.z = 0
+            self.lidar_flag = 0
+        else:
+            self.lidar_flag = 1
 
     def measurements_callback(self, img1, img2):
         cv_image1 = self.bridge.imgmsg_to_cv2(img1, desired_encoding='bgr8')
@@ -546,10 +586,28 @@ class Detector:
         current_v = [self.current_v[0],self.current_v[1],self.current_theta]
         goal_vel_theta = goal[3]
         rviz_sim = markerGen([0,0], [goal[0]+0.15,goal[1]], current_v,goal_vel_theta,result)
+        self.twist.linear.x = self.twist.linear.x
+        self.twist.angular.z = -self.twist.angular.z * 1
+
+        if self.lidar_flag == 0:
+            self.twist.linear.x = 0
+            self.twist.angular.z = 0
+
+        if np.abs(self.twist.linear.x) > self.vx_max or np.abs(self.twist.angular.z) > self.az_max:
+            propotion1 = np.abs(self.vx_max)/self.twist.linear.x
+            propotion2 = np.abs(self.twist.angular.z)/self.az_max
+            propotion = max(propotion1,propotion2)
+            self.twist.linear.x = self.twist.linear.x / propotion
+            self.twist.angular.z = self.twist.angular.z / propotion
+
+        if np.abs(self.twist.linear.x) > self.vx_max or np.abs(self.twist.angular.z) > self.az_max:
+            self.twist.linear.x = 0
+            self.twist.angular.z = 0
+            print("error")
+
         self.gap_vel_pub.publish(self.twist)
 
         # if np.abs(goal_vel_theta) > 1:
-        print("len(lines2)",len(lines2),"len(foo)",len(foo))
         # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
         #                          sharex=True, sharey=True)
         # ax = axes.ravel()
