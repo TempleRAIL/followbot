@@ -15,6 +15,8 @@ import math
 from nav_msgs.msg import Odometry
 import message_filters
 from sensor_msgs.msg import Image, PointCloud2
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from skimage.morphology import skeletonize
 from skimage.transform import probabilistic_hough_line
@@ -30,7 +32,7 @@ from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 from skimage.transform import hough_line, hough_line_peaks
 from roboteq_motor_controller_driver.msg import channel_values
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import Image
 
 class HoughBundler:
     '''Clasterize and merge each cluster of cv2.HoughLinesP() output
@@ -115,7 +117,7 @@ class HoughBundler:
         'Clusterize (group) lines'
         groups = []  # all lines groups are here
         # Parameters to play with
-        min_distance_to_merge = 15
+        min_distance_to_merge = 30
         min_angle_to_merge = 30
         # first line will create new group every time
         groups.append([lines[0]])
@@ -205,39 +207,45 @@ class Controller:
         self.max_turning_omega = 1.5 * self.v_turn/1
         self.current_v = []
         self.current_theta = []
+        self.last_goal = []
 
     def find_goal(self, current_p, current_vel, final_p, dist_min,final_theta):
-        x0, y0 = np.array(current_p)
-        vx0, vy0 = np.array(current_vel)  # vx = vel, vy = 0
-        xf, yf = np.array(final_p)
-        vxf, vyf = np.array([self.v1*np.cos(final_theta),self.v1*np.sin(final_theta)])
-        if np.sqrt(xf ** 2 + yf ** 2) >= dist_min:
-            x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,self.v1)
-            y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,self.v1)
-            min_circle_time = self.convolve_and_sum(x_params, y_params, dist_min)
-            # print("min_circle_time",min_circle_time)
-            if min_circle_time == -1:
-                min_circle_time = 1.2 * np.sqrt(xf**2+yf**2)/self.v1
-            x_params = np.reshape(x_params,4)
-            y_params = np.reshape(y_params,4)
-            goal_x = np.matmul(x_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
-            goal_y = np.matmul(y_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
-            # print("x_params",x_params,"y_params",y_params)
-            vx = np.matmul(x_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
-            vy = np.matmul(y_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
-            if vx <= 0.01:
-                theta = np.pi/2
-            else:
-                theta = np.arctan(vy/vx)
-
-        else:
-            goal_x = xf
-            goal_y = yf
-            theta = final_theta
-
-        [v, w] = self.calculate_velocity([goal_x, goal_y])  # to be changed with proportional control
+        # x0, y0 = np.array(current_p)
+        # vx0, vy0 = np.array(current_vel)  # vx = vel, vy = 0
+        # xf, yf = np.array(final_p)
+        # vxf, vyf = np.array([self.v1*np.cos(final_theta),self.v1*np.sin(final_theta)])
+        # if np.sqrt(xf ** 2 + yf ** 2) >= dist_min:
+        #     x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,self.v1)
+        #     y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,self.v1)
+        #     min_circle_time = self.convolve_and_sum(x_params, y_params, dist_min)
+        #     # print("min_circle_time",min_circle_time)
+        #     if min_circle_time == -1:
+        #         min_circle_time = 1.2 * np.sqrt(xf**2+yf**2)/self.v1
+        #     x_params = np.reshape(x_params,4)
+        #     y_params = np.reshape(y_params,4)
+        #     goal_x = np.matmul(x_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
+        #     goal_y = np.matmul(y_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
+        #     # print("x_params",x_params,"y_params",y_params)
+        #     vx = np.matmul(x_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
+        #     vy = np.matmul(y_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
+        #     if vx <= 0.01:
+        #         theta = np.pi/2
+        #     else:
+        #         theta = np.arctan(vy/vx)
+        #
+        # else:
+        #     goal_x = xf
+        #     goal_y = yf
+        #     theta = final_theta
+        #
+        # [v, w] = self.calculate_velocity([goal_x, goal_y])  # to be changed with proportional control
+        # print("[goal_x, goal_y]",[goal_x, goal_y],"v_cub,w_cub",v,w)
+        if self.last_goal:
+            distance
+        [v, w] = self.calculate_velocity(final_p)
         self.twist.linear.x = v
         self.twist.angular.z = w
+        print("final_p",final_p,"245,v,w",v,w)
         return self.twist
 
     def cubic_poly_motion_planning(self, currentp, current_vel, finalp, final_vel, avg_vel):
@@ -323,7 +331,8 @@ class Controller:
         R = np.dot(goal, goal) / (2. * goal[1])
 
         v_cmd = w_cmd = 0.
-        if R < 0.05:
+        print("R",R)
+        if np.abs(R) < 0.05:
             v_cmd = 0.
             w_cmd = self.w_max / np.sign(R)
         elif np.isinf(R):
@@ -440,10 +449,11 @@ class markerGen():
 class Detector:
     def __init__(self):
         self.twist = Twist()
+
         self.bridge = cv_bridge.CvBridge()
         self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
         self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
-        self.image_pub = rospy.Publisher("/detection_result_umage",CompressedImage)
+        self.detection_image_pub = rospy.Publisher("/detection_result_usage",Image,queue_size=5)
         # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
         # T265 parameters
         self.PPX1 = 419.467010498047
@@ -458,7 +468,7 @@ class Detector:
         self.Knew1[(0, 1), (0, 1)] = 1 * self.Knew1[(0, 1), (0, 1)]
         self.R = np.eye(3)
         self.t = np.array([0.15, -0.03, 0.15])
-        self.detection_pub = rospy.Publisher("/detected_line", PoseStamped, queue_size=1)
+        self.detection_pub = rospy.Publisher("/detected_line", PoseStamped, queue_size=5)
         self.mgs = 1
         self.last_trans = []
         self.last_theta = []
@@ -469,7 +479,7 @@ class Detector:
         self.current_theta = 0
         self.vx_max = 0.7
         self.az_max = 0.85
-        self.lidar_flag = 0
+        self.lidar_flag = 1
         self.twist = Twist()
         self.bridge = cv_bridge.CvBridge()
         self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
@@ -477,7 +487,6 @@ class Detector:
         # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
         self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=15, slop=0.1)
         self.measurements.registerCallback(self.measurements_callback)
-
         self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
         self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
         self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
@@ -547,13 +556,17 @@ class Detector:
         cv_image2 = self.bridge.imgmsg_to_cv2(img2, desired_encoding='bgr8')
         img_undistorted = cv2.fisheye.undistortImage(cv_image1, self.K1, D=self.D1, Knew=self.Knew1)
         img_undistorted = cv2.cvtColor(img_undistorted, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(img_undistorted,(5,5),0)
-        (thresh, im_bw2) = cv2.threshold(blur, 0, 127,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        im_bw2[0:int(self.PPY1),:] = 0
+        # blur = cv2.GaussianBlur(img_undistorted,(7,7),0)
+        (thresh, im_bw2) = cv2.threshold(img_undistorted, 0, 32,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        kernel = np.ones((3, 3), np.uint8)
+        im_bw2 = cv2.dilate(im_bw2, kernel, cv2.BORDER_REFLECT)
+        im_bw2[0:int(self.PPY1)+25,:] = 0
         edges = cv2.Canny(im_bw2, 0,127) # with the black&white image, any value seems to be fine
+        # edges[:,0:100] = 0
+        # edges[:,-100:-1] = 0
         # tested_angles = np.linspace(-np.pi / 2, np.pi / 2, 360, endpoint=False)
         # h, theta, d = hough_line(edges, theta=tested_angles)
-        prob_hough_lines = probabilistic_hough_line(edges, threshold=30, line_length=25, line_gap=10)
+        prob_hough_lines = probabilistic_hough_line(edges, threshold=15, line_length=25, line_gap=10)
         new_lines = []
         for line in prob_hough_lines:
             p0, p1 = line
@@ -587,26 +600,30 @@ class Detector:
 
         if np.abs(self.twist.linear.x) <= 0.001:
             self.twist.linear.x = 0
-            print("case_0")
+            print("case_0",self.twist.linear.x,self.twist.angular.z)
         else:
             self.twist.linear.x = self.twist.linear.x + 0.35 * np.sign(self.twist.linear.x)
-            print("case_-1")
+            print("case_-1",self.twist.linear.x,self.twist.angular.z)
 
         if self.lidar_flag == 0:
             self.twist.linear.x = 0
             self.twist.angular.z = 0
-            print("case_1")
+            print("case_1",self.twist.linear.x,self.twist.angular.z)
 
         if np.abs(self.twist.linear.x) > self.vx_max or np.abs(self.twist.angular.z) > self.az_max:
-            print("case_2")
-            propotion1 = np.abs(self.vx_max)/self.twist.linear.x
-            propotion2 = np.abs(self.twist.angular.z)/self.az_max
+            print("case_2",self.twist.linear.x,self.twist.angular.z)
+            propotion1 = np.abs(self.twist.linear.x/self.vx_max)
+            propotion2 = np.abs(self.az_max/self.twist.angular.z)
             propotion = max(propotion1,propotion2)
-            self.twist.linear.x = self.twist.linear.x / propotion
-            self.twist.angular.z = self.twist.angular.z / propotion
+            if propotion > 0.01:
+                self.twist.linear.x = self.twist.linear.x / propotion
+                self.twist.angular.z = self.twist.angular.z / propotion
+            else:
+                self.twist.linear.x = 0
+                self.twist.angular.z = 0
 
         if np.abs(self.twist.linear.x) > self.vx_max or np.abs(self.twist.angular.z) > self.az_max:
-            print("case_3")
+            print("case_3",self.twist.linear.x,self.twist.angular.z)
             self.twist.linear.x = 0
             self.twist.linear.y = 0
             self.twist.linear.z = 0
@@ -618,6 +635,26 @@ class Detector:
 
         self.gap_vel_pub.publish(self.twist)
 
+        try:
+            fig = plt.figure()
+            ax = fig.add_subplot(1,1,1)
+            plt.imshow(edges, cmap='gray')
+            # ax.imshow(edges * 0, cmap='gray')
+            for line in lines2:
+                p0, p1 = line
+                plt.plot((p0[0], p1[0]), (p0[1], p1[1]))
+                plt.plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
+            print(goal)
+            plt.scatter(np.array([goal[7][0],goal[8][0]]),np.array([goal[7][1],goal[8][1]]),s=300,c='r', marker ="+")
+            fig.canvas.draw()
+            img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8,
+                sep='')
+            img  = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
+            image_message = self.bridge.cv2_to_imgmsg(img, encoding="passthrough")
+            self.detection_image_pub.publish(image_message)
+        finally:
+            print("plot failed")
         # if np.abs(goal_vel_theta) > 1:
         # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
         #                          sharex=True, sharey=True)
@@ -633,7 +670,7 @@ class Detector:
         # ax[1].axis('off')
         # ax[1].set_title('gaussianBlur_img ', fontsize=20)
         #
-        # ax[5].imshow(edges * 0, cmap='gray')
+        # ax[5].imshow(edges , cmap='gray')
         # for line in lines2:
         #     p0, p1 = line
         #     ax[5].plot((p0[0], p1[0]), (p0[1], p1[1]))
@@ -657,7 +694,7 @@ class Detector:
         # ax[3].set_ylim((img_undistorted.shape[0], 0))
         # ax[3].set_title('Probabilistic Hough')
         #
-        # ax[4].imshow(edges * 0, cmap='gray')
+        # ax[4].imshow(edges , cmap='gray')
         # for line in foo:
         #     p0, p1 = line
         #     ax[4].plot((p0[0], p1[0]), (p0[1], p1[1]))
@@ -693,8 +730,6 @@ class Detector:
         X,Y,Z = Z,-X,-Y
         return X/ 1000.0,Y/1000.0,Z/1000.0
 
-
-
     def XY_2_XYZ_Goal(self, lines, shape):
         height, width = shape
         center_point = [(np.floor(width / 2), height - 1)]
@@ -702,49 +737,53 @@ class Detector:
         points_list2 = []
         lines = self.theta_filter(lines)
         if len(lines) == 0:
-            result = np.array([0.1, 0, -0.15, 0])
+            result = np.array([0.1, 0, -0.15, 0, 0.1, 0, -0.15, (0.1, 0), (0.1, 0)])
         else:
             for line in lines:
-                points_list.append(line[0])
-                points_list.append(line[1])
-                temp_X,temp_Y,temp_Z = self.img2ground(line[0])
-                points_list2.append((temp_X,temp_Y))
-                temp_X,temp_Y,temp_Z = self.img2ground(line[1])
-                points_list2.append((temp_X,temp_Y))
+                temp_X1,temp_Y1,temp_Z1 = self.img2ground(line[0])
+                temp_X2,temp_Y2,temp_Z2 = self.img2ground(line[1])
+                if np.abs(temp_Y1) < 1.2 or np.abs(temp_Y2) < 1.2 : # filter based on Y value
+                    points_list2.append((temp_X1,temp_Y1))
+                    points_list2.append((temp_X2,temp_Y2))
+                    points_list.append(line[0])
+                    points_list.append(line[1])
             # print("points_list",points_list,"points_list2",points_list2)
-            DIST = distance.cdist(np.array(points_list), np.array(center_point))
-            DIST2 = distance.cdist(np.array(points_list2), np.array([(0,0)]))
-            index = np.where(DIST == DIST.min())
-            index2 = np.where(DIST2 == DIST2.min())
-            # print("index",index,"DIST",DIST,"DIST.min()",DIST.min())
-            # print("index2",index2,"DIST2",DIST2,"DIST2.min()",DIST2.min())
+            if len(points_list2) > 0:
+                DIST = distance.cdist(np.array(points_list), np.array(center_point))
+                DIST2 = distance.cdist(np.array(points_list2), np.array([(0,0)]))
+                index = np.where(DIST == DIST.min())
+                index2_1 = np.where(DIST2 == DIST2.min())
+                # print("index",index,"DIST",DIST,"DIST.min()",DIST.min())
+                # print("index2_1",index2_1,"DIST2",DIST2,"DIST2.min()",DIST2.min())
 
+                if np.int(index[0])%2 == 0:
+                    the_other_point = points_list[np.int(index[0]) + 1]
+                else:
+                    the_other_point = points_list[np.int(index[0]) - 1]
 
-            if np.int(index[0])%2 == 0:
-                the_other_point = points_list[np.int(index[0]) + 1]
+                if np.int(index2_1[0])%2 == 0:
+                    the_other_point2 = points_list2[np.int(index2_1[0]) + 1]
+                    index2_2 = np.int(index2_1[0]) + 1
+                else:
+                    the_other_point2 = points_list2[np.int(index2_1[0]) - 1]
+                    index2_2 = np.int(index2_1[0]) - 1
+                X = points_list2[np.int(index2_1[0])][0]
+                Y = -points_list2[np.int(index2_1[0])][1]
+                Z = -0.15
+                X2 = the_other_point2[0]
+                Y2 = -the_other_point2[1]
+                Z2 = -0.15
+                if np.abs(X2-X) < 0.01:
+                    theta = 0
+                else:
+                    theta = np.arctan((Y2-Y)/(X2-X))
+                result = np.array([ X,Y,Z,theta,X2,Y2,Z2,points_list[np.int(index2_1[0])],points_list[np.int(index2_2)]])
             else:
-                the_other_point = points_list[np.int(index[0]) - 1]
-
-            if np.int(index2[0])%2 == 0:
-                the_other_point2 = points_list2[np.int(index2[0]) + 1]
-            else:
-                the_other_point2 = points_list2[np.int(index2[0]) - 1]
+                result = np.array([0.1, 0, -0.15, 0, 0.1, 0, -0.15, (0.1, 0), (0.1, 0)])
+            # if np.sqrt(X**2+Y**2) +  np.sqrt(X2**2+Y2**2) > 6:
 
 
 
-            X = points_list2[np.int(index2[0])][0]
-            Y = -points_list2[np.int(index2[0])][1]
-            Z = -0.15
-            X2 = the_other_point2[0]
-            Y2 = -the_other_point2[1]
-            Z2 = -0.15
-            if np.abs(X2-X) < 0.1:
-                theta = 0
-            else:
-                theta = np.arctan((Y2-Y)/(X2-X))
-                if theta < 0:
-                    theta = theta + np.pi
-            result = np.array([ X,Y,Z,theta,X2,Y2,Z2])
 
             # print("lines", lines)
             # print("DIST",DIST,"index",index,"center_point",center_point)
@@ -759,7 +798,6 @@ class Detector:
             # # x = Z,y = -X, z = -Y
             # X,Y,Z = Z,-X,-Y
             # X2,Y2,Z2 = Z2, -X2, -Y2
-            #
             # if np.abs(X2-X) < 0.1:
             #     theta = 0
             # else:
