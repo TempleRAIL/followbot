@@ -8,31 +8,28 @@ import numpy as np
 import rospy
 import rosparam
 import cv2, cv_bridge
-from sensor_msgs.msg import BatteryState
-from std_msgs.msg import Int8
+from sensor_msgs.msg import BatteryState,Image
+from std_msgs.msg import Int8,ColorRGBA
 from followbot.msg import MGSMeasurement, MGSMeasurements, MGSMarker
 import math
-from nav_msgs.msg import Odometry
 import message_filters
-from sensor_msgs.msg import Image, PointCloud2
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from skimage.morphology import skeletonize
-from skimage.transform import probabilistic_hough_line
+from skimage.transform import probabilistic_hough_line,hough_line, hough_line_peaks
 from scipy.spatial import distance
 import decimal
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry,Path
 from tf.transformations import euler_from_quaternion,quaternion_from_euler
-from geometry_msgs.msg import Twist, Pose
 import tf2_ros
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Twist, Pose, PoseStamped, Point
 from interactive_markers.interactive_marker_server import *
-from visualization_msgs.msg import Marker
-from visualization_msgs.msg import MarkerArray
-from skimage.transform import hough_line, hough_line_peaks
+from visualization_msgs.msg import Marker,MarkerArray
 from roboteq_motor_controller_driver.msg import channel_values
-from sensor_msgs.msg import Image
+from scipy.optimize import fsolve
+import tf
+
 
 class HoughBundler:
     '''Clasterize and merge each cluster of cv2.HoughLinesP() output
@@ -197,6 +194,7 @@ class Controller:
         self.wheel_radius = rospy.get_param('~wheel_radius',0.2)
         self.v_max = rospy.get_param('~v_max',0.3 + 0.4)
         self.w_max = rospy.get_param('~w_max',0.8)
+        self.distance_mag = 20.8 * 0.0254
         self.scale_factor = 0.5 # from true world to simulation
         self.p = self.scale_factor*rospy.get_param('~p', -7.0) # proportional controller constant
         self.v1 = self.scale_factor * rospy.get_param('~v', 0.666)  # nominal velocity (1.49 MPH)
@@ -209,56 +207,103 @@ class Controller:
         self.current_theta = []
         self.last_goal = []
 
+
     def find_goal(self, current_p, current_vel, final_p, dist_min,final_theta):
         # x0, y0 = np.array(current_p)
-        # vx0, vy0 = np.array(current_vel)  # vx = vel, vy = 0
-        # xf, yf = np.array(final_p)
-        # vxf, vyf = np.array([self.v1*np.cos(final_theta),self.v1*np.sin(final_theta)])
-        # if np.sqrt(xf ** 2 + yf ** 2) >= dist_min:
-        #     x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,self.v1)
-        #     y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,self.v1)
-        #     min_circle_time = self.convolve_and_sum(x_params, y_params, dist_min)
-        #     # print("min_circle_time",min_circle_time)
-        #     if min_circle_time == -1:
-        #         min_circle_time = 1.2 * np.sqrt(xf**2+yf**2)/self.v1
-        #     x_params = np.reshape(x_params,4)
-        #     y_params = np.reshape(y_params,4)
-        #     goal_x = np.matmul(x_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
-        #     goal_y = np.matmul(y_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
-        #     # print("x_params",x_params,"y_params",y_params)
-        #     vx = np.matmul(x_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
-        #     vy = np.matmul(y_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
-        #     if vx <= 0.01:
-        #         theta = np.pi/2
-        #     else:
-        #         theta = np.arctan(vy/vx)
-        #
+        x0, y0 = np.array([0,0])
+        vx0, vy0 = np.array(current_vel)  # vx = vel, vy = 0
+        xf, yf = np.array(final_p)
+        vxf, vyf = np.array([self.v1*np.cos(final_theta),self.v1*np.sin(final_theta)])
+        if np.sqrt(xf ** 2 + yf ** 2) >= dist_min:
+            total_expected_time = 1.2 * np.sqrt(xf**2+yf**2)/self.v1
+            x_params = self.cubic_poly_motion_planning(x0, vx0, xf, vxf,total_expected_time)
+            y_params = self.cubic_poly_motion_planning(y0, vy0, yf, vyf,total_expected_time)
+            min_circle_time = self.convolve_and_sum(x_params, y_params, dist_min)
+            # print("min_circle_time",min_circle_time)
+            if min_circle_time == -1:
+                min_circle_time = 1.2 * dist_min/self.v1
+            x_params = np.reshape(x_params,4)
+            y_params = np.reshape(y_params,4)
+            goal_x = np.matmul(x_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
+            goal_y = np.matmul(y_params , np.array([1, min_circle_time, min_circle_time ** 2, min_circle_time ** 3]))
+            time_segment_list = np.linspace(0, total_expected_time, 10+1)[1:]
+            midway_x_list = []
+            midway_y_list = []
+            for time_segment in time_segment_list:
+                goal_x_seg = np.matmul(x_params , np.array([1, time_segment, time_segment ** 2, time_segment ** 3]))
+                goal_y_seg = np.matmul(y_params , np.array([1, time_segment, time_segment ** 2, time_segment ** 3]))
+                midway_x_list.append(goal_x_seg)
+                midway_y_list.append(goal_y_seg)
+            # print("x_params",x_params,"y_params",y_params)
+            vx = np.matmul(x_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
+            vy = np.matmul(y_params , np.array([0, 1, 2 * min_circle_time, 3 * min_circle_time ** 2]))
+            if vx <= 0.01:
+                theta = np.pi/2
+            else:
+                theta = np.arctan(vy/vx)
+            case = 2
+
+        else:
+            goal_x = xf
+            goal_y = yf
+            goal = [goal_x,goal_y]
+            R = np.dot(goal, goal) / (2. * goal[1])
+            midway_x_list = []
+            midway_y_list = []
+            if np.isinf(R):
+                arc_theta_list =  np.linspace(0, np.sign(R)*0.01, 10+1)[1:]
+                for temp_theta in arc_theta_list:
+                    goal_x_seg = R * np.cos(temp_theta)
+                    goal_y_seg = R * np.sin(temp_theta)
+                    midway_x_list.append(goal_x_seg)
+                    midway_y_list.append(goal_y_seg)
+                case = 3
+            else:
+                if R > 0:
+                    arc_theta = np.pi/2 - np.arctan(goal_x/(R - goal_y))
+                    arc_theta_list =  np.linspace(0, arc_theta, 10+1)[1:]
+                    for temp_theta in arc_theta_list:
+                        goal_x_seg = R * np.sin(temp_theta)
+                        goal_y_seg = R * (1 - np.cos(temp_theta))
+                        midway_x_list.append(goal_x_seg)
+                        midway_y_list.append(goal_y_seg)
+                elif R < 0:
+                    arc_theta = np.pi/2 - np.arctan(np.abs(goal_x)/(np.abs(R) - np.abs(goal_y)))
+                    arc_theta_list =  np.linspace(0, arc_theta, 10+1)[1:]
+                    for temp_theta in arc_theta_list:
+                        goal_x_seg = np.abs(R) * np.sin(temp_theta)
+                        goal_y_seg = R * (1 - np.cos(temp_theta))
+                        midway_x_list.append(goal_x_seg)
+                        midway_y_list.append(goal_y_seg)
+                case = 3
+        [v, w, R] = self.calculate_velocity([goal_x, goal_y])  # to be changed with proportional control
+        print("v, w,previous",v, w)
+        [update_theta,update_R] = fsolve(self.radius_solver,np.array([np.pi - 2 * np.arctan(np.abs(goal_x)/(np.abs(R)) - np.abs(goal_y)), np.abs(R)]),args = (self.distance_mag,goal_x,goal_y))
+        # if np.sign(R):
+        #     update_theta,update_R = np.abs(update_theta),np.abs(update_R)
         # else:
-        #     goal_x = xf
-        #     goal_y = yf
-        #     theta = final_theta
-        #
-        # [v, w] = self.calculate_velocity([goal_x, goal_y])  # to be changed with proportional control
-        # print("[goal_x, goal_y]",[goal_x, goal_y],"v_cub,w_cub",v,w)
-        if self.last_goal:
-            distance
-        [v, w] = self.calculate_velocity(final_p)
+        #     update_theta,update_R = np.abs(update_theta),-np.abs(update_R)
+        # [v, w, R] = self.calculate_velocity([update_R*np.sin(np.pi - update_theta), update_R*(1 + np.cos(np.pi-update_theta))])  # to be changed with proportional control
+        new_goal = [0,0]
+        # new_goal = [update_R*np.sin(np.pi - update_theta), update_R*(1 + np.cos(np.pi-update_theta))]
+        print("[goal_x, goal_y]",[goal_x, goal_y],"v_cub,w_cub",v,w)
+
+        # [v, w] = self.calculate_velocity(final_p)
         self.twist.linear.x = v
         self.twist.angular.z = w
         print("final_p",final_p,"245,v,w",v,w)
-        return self.twist
+        return [self.twist,midway_x_list,midway_y_list,R,new_goal,case]
 
-    def cubic_poly_motion_planning(self, currentp, current_vel, finalp, final_vel, avg_vel):
+    def cubic_poly_motion_planning(self, currentp, current_vel, finalp, final_vel,total_expected_time):
         p0 = np.array([currentp])
         v0 = np.array([current_vel])  # vx = vel, vy = 0
         pf = np.array([finalp])
         vf = np.array([final_vel])
-        temp_vec = np.array(pf - p0)
-        dt = np.dot(temp_vec, temp_vec) / avg_vel
+        dt = total_expected_time
         a0 = p0
         a1 = v0
         M = np.array([[dt ** 2, dt ** 3], [2 * dt, 3 * dt ** 2]])
-        a2, a3 =np.matmul( np.linalg.inv(M) , np.array([pf - a0 - dt * a1, vf - a1]))#here is a problem
+        a2, a3 =np.matmul(np.linalg.inv(M) , np.array([pf - a0 - dt * a1, vf - a1]))#here is a problem
         # print("dt",dt,"a0",a0,"a1",a1,"a2",a2,"a3",a3)
         return [list(a0), list(a1), list(a2), list(a3)]
 
@@ -308,7 +353,6 @@ class Controller:
         else:
             return [0, j]
 
-
     def binary_search(self, poly_param, low_bound, up_bound):
         t = (low_bound + up_bound) / 2.0
         t0 = low_bound
@@ -325,14 +369,12 @@ class Controller:
             else:
                 return [t0,-1]
 
-
     def calculate_velocity(self, goal):
         # calculate the radius of curvature
         R = np.dot(goal, goal) / (2. * goal[1])
-
         v_cmd = w_cmd = 0.
         print("R",R)
-        if np.abs(R) < 0.05:
+        if np.abs(R) < 0.01:
             v_cmd = 0.
             w_cmd = self.w_max / np.sign(R)
         elif np.isinf(R):
@@ -351,9 +393,7 @@ class Controller:
 
         v = r / 2. * (u[0] + u[1])
         w = r / L * (u[1] - u[0])
-
-        return (v, w)
-
+        return (v, w, R)
 
     def straight_line_follower(self,tf_gap,tf_now):
         tf_gap_theta = euler_from_quaternion([tf_gap.transform.rotation.x,
@@ -377,17 +417,23 @@ class Controller:
     def cmd_vel_tf(self,tf_info,cmd_vel):
         print("tf_info")
 
+    def radius_solver(self,x,*arg):
+        goal_x = arg[1]
+        goal_y = arg[2]
+        l = arg[0]
+        return [np.sin(x[0]) * x[1] + np.sin(x[0]) * l - goal_x, (1-np.cos(x[0]))*x[1] + np.cos(x[0]) * l -goal_y]
 
 
 
 
 class markerGen():
-    def __init__(self,current_position,goal_position,current_vel,goal_vel_theta,current_cmd_vel):
-        self.markerPointPub = rospy.Publisher("/markerPointPub", Marker, queue_size=1)
+    def __init__(self,current_position,goal_position,current_vel,goal_vel_theta,current_cmd_vel,midway_x_list,midway_y_list,R,new_goal,color_case):
+        self.markerPointPub = rospy.Publisher("/markerPointPub", Marker, queue_size=10)
         self.markerPub = rospy.Publisher("/markerPub", MarkerArray, queue_size=10)
-
         self.robotGoalMarker = MarkerArray()
         self.robotPoseMarker = MarkerArray()
+        self.robotPoseMarker_path = MarkerArray()
+        self.goal_marker = MarkerArray()
         self.markerID = 0
         self.colorID = 0
         self.colorDict = {
@@ -406,7 +452,35 @@ class markerGen():
         }
         self.markerID = 0
 
-
+        marker1 = Marker()
+        marker1.frame_locked = True
+        marker1.ns = "Strip"
+        marker1.header.frame_id = "/magnetic"
+        marker1.id = self.markerID
+        self.markerID+=1
+        marker1.header.stamp = rospy.Time.now()
+        marker1.type = Marker.LINE_STRIP
+        marker1.scale.x = 0.05
+        marker1Points = []
+        marker1Colors = []
+        marker1.lifetime = rospy.Duration(0.4)
+        [colorR,colorG,colorB] = self.colorDict[color_case]
+        # print("colorR,colorG,colorB",colorR,colorG,colorB)
+        for num in range(0,len(midway_x_list)):
+            pt = Point()
+            pt.x = midway_x_list[num]
+            pt.y = midway_y_list[num]
+            pt.z = 0
+            color = ColorRGBA()
+            color.r = colorR/255
+            color.g = colorG/255
+            color.b = colorB/255
+            color.a = 1
+            marker1Points.append(pt)
+            marker1Colors.append(color)
+        marker1.points = marker1Points
+        marker1.colors = marker1Colors
+        self.robotPoseMarker_path.markers.append(marker1)
         for i in range(2):
             if i == 0:
                 theta = 0
@@ -417,7 +491,7 @@ class markerGen():
                 position = goal_position
                 color_num = 3
             robotPose_marker = Marker()
-            robotPose_marker.header.frame_id = "/camera_pose_frame"
+            robotPose_marker.header.frame_id = "/magnetic"
             robotPose_marker.type = Marker.ARROW
             robotPose_marker.ns = "Arrows"
             robotPose_marker.id = self.markerID
@@ -441,7 +515,31 @@ class markerGen():
             robotPose_marker.pose.orientation.w = w
             self.robotPoseMarker.markers.append(robotPose_marker)
 
+        goal_marker = Marker()
+        goal_marker.header.frame_id = "/magnetic"
+        goal_marker.type = Marker.SPHERE
+        goal_marker.id = self.markerID
+        self.markerID+=1
+        goal_marker.scale.x = 1
+        goal_marker.scale.y = 1
+        goal_marker.scale.z = 1
+        [x,y,z,w] = quaternion_from_euler(0,0,0)
+        goal_marker.pose.orientation.x = x
+        goal_marker.pose.orientation.y = y
+        goal_marker.pose.orientation.z = z
+        goal_marker.pose.orientation.w = w
+        goal_marker.pose.position.x = new_goal[0]
+        goal_marker.pose.position.y = new_goal[1]
+        goal_marker.pose.position.z = 0
+        goal_marker.color.r = self.colorDict[7][0]
+        goal_marker.color.g = self.colorDict[7][1]
+        goal_marker.color.b = self.colorDict[7][2]
+        goal_marker.action = goal_marker.ADD
+        self.goal_marker.markers.append(goal_marker)
+
+        self.markerPub.publish(self.robotPoseMarker_path)
         self.markerPub.publish(self.robotPoseMarker)
+        self.markerPub.publish(self.goal_marker)
         # self.markerPub.publish(self.robotGoalMarker)
 
 
@@ -449,11 +547,10 @@ class markerGen():
 class Detector:
     def __init__(self):
         self.twist = Twist()
-
         self.bridge = cv_bridge.CvBridge()
-        self.img_sub_1 = message_filters.Subscriber('camera/fisheye1/image_raw', Image)
-        self.img_sub_2 = message_filters.Subscriber('camera/fisheye2/image_raw', Image)
         self.detection_image_pub = rospy.Publisher("/detection_result_usage",Image,queue_size=5)
+        self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
+        self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
         # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
         # T265 parameters
         self.PPX1 = 419.467010498047
@@ -472,6 +569,9 @@ class Detector:
         self.mgs = 1
         self.last_trans = []
         self.last_theta = []
+        self.mag_to_cam = [6*0.0254,-3*0.0254,0]
+        self.br = tf.TransformBroadcaster()
+        self.br.sendTransform((-6*0.0254, 3*0.0254, 0),tf.transformations.quaternion_from_euler(0, 0, 0),rospy.Time.now(),"magnetic","camera_pose_frame")
         tfBuffer = tf2_ros.Buffer()
         listener = tf2_ros.TransformListener(tfBuffer)
         rate = rospy.Rate(10.0)
@@ -488,13 +588,10 @@ class Detector:
         self.measurements = message_filters.ApproximateTimeSynchronizer([self.img_sub_1, self.img_sub_2], queue_size=15, slop=0.1)
         self.measurements.registerCallback(self.measurements_callback)
         self.odom_sub = rospy.Subscriber('camera/odom/sample', Odometry, self.odom_callback,queue_size=5)
-        self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
-        self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
         self.gap_vel_pub = rospy.Publisher('/gap_cmd_vel', Twist, queue_size=5)
 
-
-
         while not rospy.is_shutdown():
+            self.br.sendTransform((-6*0.0254, 3*0.0254, 0),tf.transformations.quaternion_from_euler(0, 0, 0),rospy.Time.now(),"magnetic","camera_pose_frame")
             if self.mgs == 1:
                 try:
                     self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
@@ -506,7 +603,6 @@ class Detector:
                     self.last_theta = []
                 except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                     continue
-
             else:
                 try:
                     self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
@@ -587,15 +683,21 @@ class Detector:
         if any(goal):
             current_p = [self.trans.transform.translation.x, self.trans.transform.translation.y]
             # target_v = [self.current_v[0] * np.cos(goal[3]), self.current_v[0] * np.sin(goal[3])]
-            result = controller_object.find_goal(current_p, self.current_v, [goal[0], goal[1]], 0.2, goal[3])
+            [result,midway_x_list,midway_y_list,R,new_goal,color_case] = controller_object.find_goal(current_p, self.current_v, [goal[0], goal[1]], 0.5, goal[3])
+
         else:
             result = controller_object.straight_line_follower(self.last_trans, self.trans)
+            midway_x_list = []
+            midway_y_list = []
+            new_goal = [0.1,0,-0.15]
+            R = []
+            color_case = 4
 
         self.twist = result
-        print("self.twist.linear.x,self.twist.angular.z",self.twist.linear.x,self.twist.angular.z)
+
         current_v = [self.current_v[0],self.current_v[1],self.current_theta]
         goal_vel_theta = goal[3]
-        rviz_sim = markerGen([0,0], [goal[0]+0.15,goal[1]], current_v,goal_vel_theta,result)
+        rviz_sim = markerGen([0,0], [goal[0],goal[1]], current_v,goal_vel_theta,result,midway_x_list,midway_y_list,R,new_goal,color_case)
 
 
         if np.abs(self.twist.linear.x) <= 0.001:
@@ -613,7 +715,7 @@ class Detector:
         if np.abs(self.twist.linear.x) > self.vx_max or np.abs(self.twist.angular.z) > self.az_max:
             print("case_2",self.twist.linear.x,self.twist.angular.z)
             propotion1 = np.abs(self.twist.linear.x/self.vx_max)
-            propotion2 = np.abs(self.az_max/self.twist.angular.z)
+            propotion2 = np.abs(self.twist.angular.z/self.az_max)
             propotion = max(propotion1,propotion2)
             if propotion > 0.01:
                 self.twist.linear.x = self.twist.linear.x / propotion
@@ -630,31 +732,33 @@ class Detector:
             self.twist.angular.x = 0
             self.twist.angular.y = 0
             self.twist.angular.z = 0
-
             print("error")
 
         self.gap_vel_pub.publish(self.twist)
 
-        try:
-            fig = plt.figure()
-            ax = fig.add_subplot(1,1,1)
-            plt.imshow(edges, cmap='gray')
-            # ax.imshow(edges * 0, cmap='gray')
-            for line in lines2:
-                p0, p1 = line
-                plt.plot((p0[0], p1[0]), (p0[1], p1[1]))
-                plt.plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
-            print(goal)
-            plt.scatter(np.array([goal[7][0],goal[8][0]]),np.array([goal[7][1],goal[8][1]]),s=300,c='r', marker ="+")
-            fig.canvas.draw()
-            img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8,
-                sep='')
-            img  = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-            img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
-            image_message = self.bridge.cv2_to_imgmsg(img, encoding="passthrough")
-            self.detection_image_pub.publish(image_message)
-        finally:
-            print("plot failed")
+        # try:
+        #     plt.cla()
+        #     fig = plt.figure()
+        #     ax = fig.add_subplot(1,1,1)
+        #     plt.imshow(edges, cmap='gray')
+        #     # ax.imshow(edges * 0, cmap='gray')
+        #     for line in lines2:
+        #         p0, p1 = line
+        #         plt.plot((p0[0], p1[0]), (p0[1], p1[1]))
+        #         plt.plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
+        #     print(goal)
+        #     plt.scatter(np.array([goal[7][0],goal[8][0]]),np.array([goal[7][1],goal[8][1]]),s=300,c='r', marker ="+")
+        #     fig.canvas.draw()
+        #     img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8,
+        #         sep='')
+        #     img  = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        #     img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
+        #     image_message = self.bridge.cv2_to_imgmsg(img, encoding="passthrough")
+        #     self.detection_image_pub.publish(image_message)
+        # finally:
+        #     plt.cla()
+        #     print("plot failed")
+
         # if np.abs(goal_vel_theta) > 1:
         # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
         #                          sharex=True, sharey=True)
@@ -720,7 +824,7 @@ class Detector:
 
             if np.abs(k) >= 1:
                 temp_lines.append(line)
-        print("temp_lines",temp_lines)
+        # print("temp_lines",temp_lines)
         return temp_lines
 
     def img2ground(self,XY_goal):
@@ -729,6 +833,11 @@ class Detector:
         X = -(XY_goal[0] - self.PPX1) / (self.Fx1 / Z)
         X,Y,Z = Z,-X,-Y
         return X/ 1000.0,Y/1000.0,Z/1000.0
+
+    def camera_tf2_mag(self,x,y,z):
+        x = x + 6 * 0.0254
+        y = y - 3 * 0.0254
+        return [x,y,z]
 
     def XY_2_XYZ_Goal(self, lines, shape):
         height, width = shape
@@ -742,7 +851,7 @@ class Detector:
             for line in lines:
                 temp_X1,temp_Y1,temp_Z1 = self.img2ground(line[0])
                 temp_X2,temp_Y2,temp_Z2 = self.img2ground(line[1])
-                if np.abs(temp_Y1) < 1.2 or np.abs(temp_Y2) < 1.2 : # filter based on Y value
+                if np.abs(temp_Y1) < 1 or np.abs(temp_Y2) < 1 : # filter based on Y value
                     points_list2.append((temp_X1,temp_Y1))
                     points_list2.append((temp_X2,temp_Y2))
                     points_list.append(line[0])
@@ -777,6 +886,8 @@ class Detector:
                     theta = 0
                 else:
                     theta = np.arctan((Y2-Y)/(X2-X))
+                X,Y,Z = self.camera_tf2_mag(X,Y,Z)
+                X2,Y2,Z2 = self.camera_tf2_mag(X2,Y2,Z2)
                 result = np.array([ X,Y,Z,theta,X2,Y2,Z2,points_list[np.int(index2_1[0])],points_list[np.int(index2_2)]])
             else:
                 result = np.array([0.1, 0, -0.15, 0, 0.1, 0, -0.15, (0.1, 0), (0.1, 0)])
