@@ -26,7 +26,7 @@ import tf2_ros
 from geometry_msgs.msg import Twist, Pose, PoseStamped, Point
 from interactive_markers.interactive_marker_server import *
 from visualization_msgs.msg import Marker,MarkerArray
-from roboteq_motor_controller_driver.msg import channel_values
+# from roboteq_motor_controller_driver.msg import channel_values
 from scipy.optimize import fsolve
 import tf
 
@@ -279,11 +279,19 @@ class Controller:
         [v, w, R] = self.calculate_velocity([goal_x, goal_y])  # to be changed with proportional control
         print("v, w,previous",v, w)
         [update_theta,update_R] = fsolve(self.radius_solver,np.array([np.pi - 2 * np.arctan(np.abs(goal_x)/(np.abs(R)) - np.abs(goal_y)), np.abs(R)]),args = (self.distance_mag,goal_x,goal_y))
-        # if np.sign(R):
-        #     update_theta,update_R = np.abs(update_theta),np.abs(update_R)
-        # else:
-        #     update_theta,update_R = np.abs(update_theta),-np.abs(update_R)
-        # [v, w, R] = self.calculate_velocity([update_R*np.sin(np.pi - update_theta), update_R*(1 + np.cos(np.pi-update_theta))])  # to be changed with proportional control
+
+        if np.sign(R):
+            update_theta,update_R = np.abs(update_theta),np.abs(update_R)
+        else:
+            update_theta,update_R = np.abs(update_theta),-np.abs(update_R)
+        print("update_R",update_R,"update_theta",update_theta)
+        if update_R == np.Inf:
+            v2 = self.v_max
+            w2 = 0
+            R2 = np.Inf
+        else:
+            [v2, w2, R2] = self.calculate_velocity([update_R*np.sin(np.pi - update_theta), update_R*(1 + np.cos(np.pi-update_theta))])  # to be changed with proportional control
+        print("v2, w2, R2",v2, w2, R2)
         new_goal = [0,0]
         # new_goal = [update_R*np.sin(np.pi - update_theta), update_R*(1 + np.cos(np.pi-update_theta))]
         print("[goal_x, goal_y]",[goal_x, goal_y],"v_cub,w_cub",v,w)
@@ -373,7 +381,6 @@ class Controller:
         # calculate the radius of curvature
         R = np.dot(goal, goal) / (2. * goal[1])
         v_cmd = w_cmd = 0.
-        print("R",R)
         if np.abs(R) < 0.01:
             v_cmd = 0.
             w_cmd = self.w_max / np.sign(R)
@@ -422,8 +429,6 @@ class Controller:
         goal_y = arg[2]
         l = arg[0]
         return [np.sin(x[0]) * x[1] + np.sin(x[0]) * l - goal_x, (1-np.cos(x[0]))*x[1] + np.cos(x[0]) * l -goal_y]
-
-
 
 
 class markerGen():
@@ -549,8 +554,8 @@ class Detector:
         self.twist = Twist()
         self.bridge = cv_bridge.CvBridge()
         self.detection_image_pub = rospy.Publisher("/detection_result_usage",Image,queue_size=5)
-        self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
-        self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
+        # self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
+        # self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
         # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
         # T265 parameters
         self.PPX1 = 419.467010498047
@@ -654,15 +659,25 @@ class Detector:
         img_undistorted = cv2.cvtColor(img_undistorted, cv2.COLOR_BGR2GRAY)
         # blur = cv2.GaussianBlur(img_undistorted,(7,7),0)
         (thresh, im_bw2) = cv2.threshold(img_undistorted, 0, 32,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        kernel = np.ones((3, 3), np.uint8)
-        im_bw2 = cv2.dilate(im_bw2, kernel, cv2.BORDER_REFLECT)
+        kernel1 = np.ones((5, 5), np.uint8)
+        kernel2 = np.ones((3, 3), np.uint8)
+        num_column = np.shape(im_bw2)[1]
+        im_bw2_left = im_bw2[:,0:np.int(np.floor(num_column/3))]
+        im_bw2_mid = im_bw2[:,(np.int(np.floor(num_column/3))+1):np.int(np.floor(2 * num_column/3)) -1]
+        im_bw2_right = im_bw2[:, np.int(np.floor(2 * num_column/3)):num_column]
+        print("shape im_bw2",np.shape(im_bw2),np.floor(np.shape(im_bw2)[1]/3))
+        im_bw2_left = cv2.dilate(im_bw2_left, kernel1, cv2.BORDER_REFLECT)
+        im_bw2_mid = cv2.dilate(im_bw2_mid, kernel2, cv2.BORDER_REFLECT)
+        im_bw2_right = cv2.dilate(im_bw2_right, kernel1, cv2.BORDER_REFLECT)
+        im_bw2 = np.hstack((im_bw2_left,im_bw2_mid,im_bw2_right))
+        # im_bw2 = cv2.dilate(im_bw2, kernel1, cv2.BORDER_REFLECT)
         im_bw2[0:int(self.PPY1)+25,:] = 0
         edges = cv2.Canny(im_bw2, 0,127) # with the black&white image, any value seems to be fine
         # edges[:,0:100] = 0
         # edges[:,-100:-1] = 0
         # tested_angles = np.linspace(-np.pi / 2, np.pi / 2, 360, endpoint=False)
         # h, theta, d = hough_line(edges, theta=tested_angles)
-        prob_hough_lines = probabilistic_hough_line(edges, threshold=15, line_length=25, line_gap=10)
+        prob_hough_lines = probabilistic_hough_line(edges, threshold=12, line_length=25, line_gap=10)
         new_lines = []
         for line in prob_hough_lines:
             p0, p1 = line
@@ -692,13 +707,10 @@ class Detector:
             new_goal = [0.1,0,-0.15]
             R = []
             color_case = 4
-
         self.twist = result
-
         current_v = [self.current_v[0],self.current_v[1],self.current_theta]
         goal_vel_theta = goal[3]
         rviz_sim = markerGen([0,0], [goal[0],goal[1]], current_v,goal_vel_theta,result,midway_x_list,midway_y_list,R,new_goal,color_case)
-
 
         if np.abs(self.twist.linear.x) <= 0.001:
             self.twist.linear.x = 0
@@ -736,28 +748,30 @@ class Detector:
 
         self.gap_vel_pub.publish(self.twist)
 
-        # try:
-        #     plt.cla()
-        #     fig = plt.figure()
-        #     ax = fig.add_subplot(1,1,1)
-        #     plt.imshow(edges, cmap='gray')
-        #     # ax.imshow(edges * 0, cmap='gray')
-        #     for line in lines2:
-        #         p0, p1 = line
-        #         plt.plot((p0[0], p1[0]), (p0[1], p1[1]))
-        #         plt.plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
-        #     print(goal)
-        #     plt.scatter(np.array([goal[7][0],goal[8][0]]),np.array([goal[7][1],goal[8][1]]),s=300,c='r', marker ="+")
-        #     fig.canvas.draw()
-        #     img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8,
-        #         sep='')
-        #     img  = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        #     img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
-        #     image_message = self.bridge.cv2_to_imgmsg(img, encoding="passthrough")
-        #     self.detection_image_pub.publish(image_message)
-        # finally:
-        #     plt.cla()
-        #     print("plot failed")
+        try:
+            plt.cla()
+            fig = plt.figure()
+            ax = fig.add_subplot(1,1,1)
+            plt.imshow(edges, cmap='gray')
+            # ax.imshow(edges * 0, cmap='gray')
+            for line in lines2:
+                p0, p1 = line
+                plt.plot((p0[0], p1[0]), (p0[1], p1[1]))
+                plt.plot([p0[0], p1[0]], [p0[1], p1[1]], 'bo')
+            plt.xlim([-100, 900])
+            plt.ylim([ 800, 0])
+            plt.scatter(np.array([goal[7][0],goal[8][0]]),np.array([goal[7][1],goal[8][1]]),s=300,c='r', marker ="+")
+            fig.canvas.draw()
+            img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8,
+                sep='')
+            img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
+            image_message = self.bridge.cv2_to_imgmsg(img, encoding="passthrough")
+            self.detection_image_pub.publish(image_message)
+        finally:
+            plt.cla()
+            print("plot failed")
+        plt.clf()
 
         # if np.abs(goal_vel_theta) > 1:
         # fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 20),
@@ -851,7 +865,7 @@ class Detector:
             for line in lines:
                 temp_X1,temp_Y1,temp_Z1 = self.img2ground(line[0])
                 temp_X2,temp_Y2,temp_Z2 = self.img2ground(line[1])
-                if np.abs(temp_Y1) < 1 or np.abs(temp_Y2) < 1 : # filter based on Y value
+                if np.abs(temp_Y1) < 0.35 or np.abs(temp_Y2) < 0.35 : # filter based on Y value
                     points_list2.append((temp_X1,temp_Y1))
                     points_list2.append((temp_X2,temp_Y2))
                     points_list.append(line[0])
@@ -862,14 +876,6 @@ class Detector:
                 DIST2 = distance.cdist(np.array(points_list2), np.array([(0,0)]))
                 index = np.where(DIST == DIST.min())
                 index2_1 = np.where(DIST2 == DIST2.min())
-                # print("index",index,"DIST",DIST,"DIST.min()",DIST.min())
-                # print("index2_1",index2_1,"DIST2",DIST2,"DIST2.min()",DIST2.min())
-
-                if np.int(index[0])%2 == 0:
-                    the_other_point = points_list[np.int(index[0]) + 1]
-                else:
-                    the_other_point = points_list[np.int(index[0]) - 1]
-
                 if np.int(index2_1[0])%2 == 0:
                     the_other_point2 = points_list2[np.int(index2_1[0]) + 1]
                     index2_2 = np.int(index2_1[0]) + 1
