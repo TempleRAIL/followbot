@@ -26,7 +26,7 @@ import tf2_ros
 from geometry_msgs.msg import Twist, Pose, PoseStamped, Point
 from interactive_markers.interactive_marker_server import *
 from visualization_msgs.msg import Marker,MarkerArray
-# from roboteq_motor_controller_driver.msg import channel_values
+from roboteq_motor_controller_driver.msg import channel_values
 from scipy.optimize import fsolve
 import tf
 from vectors import *
@@ -549,8 +549,8 @@ class Detector:
         self.twist = Twist()
         self.bridge = cv_bridge.CvBridge()
         self.detection_image_pub = rospy.Publisher("/detection_result_usage",Image,queue_size=5)
-        # self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
-        # self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
+        self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
+        self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
         # self.odom_sub = rospy.Subscriber("odom", Odometry, self.odom_callback)
         # T265 parameters
         self.PPX1 = 419.467010498047
@@ -578,7 +578,7 @@ class Detector:
         self.current_v = []
         self.current_theta = 0
         self.vx_max = 0.1
-        self.az_max = 0.85
+        self.az_max = 0.6
         self.lidar_flag = 1
         self.twist = Twist()
         self.bridge = cv_bridge.CvBridge()
@@ -623,29 +623,29 @@ class Detector:
         self.current_v = [vx, vy]
         self.current_theta = theta
 
-    # def lidar_front_callback(self,msg):
-    #     if any(msg.value):
-    #         self.twist.angular.z = 0
-    #         self.twist.angular.y = 0
-    #         self.twist.angular.x = 0
-    #         self.twist.linear.x = 0
-    #         self.twist.linear.y = 0
-    #         self.twist.linear.z = 0
-    #         self.lidar_flag = 0
-    #     else:
-    #         self.lidar_flag = 1
-    #
-    # def lidar_back_callback(self,msg):
-    #     if any(msg.value):
-    #         self.twist.angular.z = 0
-    #         self.twist.angular.y = 0
-    #         self.twist.angular.x = 0
-    #         self.twist.linear.x = 0
-    #         self.twist.linear.y = 0
-    #         self.twist.linear.z = 0
-    #         self.lidar_flag = 0
-    #     else:
-    #         self.lidar_flag = 1
+    def lidar_front_callback(self,msg):
+        if any(msg.value):
+            self.twist.angular.z = 0
+            self.twist.angular.y = 0
+            self.twist.angular.x = 0
+            self.twist.linear.x = 0
+            self.twist.linear.y = 0
+            self.twist.linear.z = 0
+            self.lidar_flag = 0
+        else:
+            self.lidar_flag = 1
+
+    def lidar_back_callback(self,msg):
+        if any(msg.value):
+            self.twist.angular.z = 0
+            self.twist.angular.y = 0
+            self.twist.angular.x = 0
+            self.twist.linear.x = 0
+            self.twist.linear.y = 0
+            self.twist.linear.z = 0
+            self.lidar_flag = 0
+        else:
+            self.lidar_flag = 1
 
     def measurements_callback(self, img1, img2):
         cv_image1 = self.bridge.imgmsg_to_cv2(img1, desired_encoding='bgr8')
@@ -668,7 +668,7 @@ class Detector:
         # im_bw2 = np.hstack((im_bw2_left,im_bw2_mid,im_bw2_right))
 
         im_bw2 = cv2.dilate(im_bw2, kernel1, cv2.BORDER_REFLECT)
-        im_bw2[0:int(self.PPY1)+40,:] = 0
+        im_bw2[0:int(self.PPY1)+70,:] = 0
         edges = cv2.Canny(im_bw2, 0,127) # with the black&white image, any value seems to be fine
         # edges = cv2.HoughLinesP(im_bw2, 1, np.pi / 180, 50, None, 30, 10)
         # edges = cv2.dilate(edges, kernel2, cv2.BORDER_REFLECT)
@@ -683,6 +683,7 @@ class Detector:
         #     new_lines.append((p0[0], p0[1], p1[0], p1[1]))
 
         linesP = cv2.HoughLinesP(edges, 1, np.pi / 180, 20, None, 20, 10)
+        print("linesP",linesP)
         new_lines = []
         for line in linesP:
             new_lines.append((line[0][0],line[0][1],line[0][2],line[0][3]))
@@ -746,7 +747,7 @@ class Detector:
                 self.twist.angular.z = 0
 
         if np.abs(self.twist.linear.x) > self.vx_max or np.abs(self.twist.angular.z) > self.az_max:
-            print("case_3",self.twist.linear.x,self.twist.angular.z)
+            print("case_3",self.twist.linear.x, self.twist.angular.z)
             self.twist.linear.x = 0
             self.twist.linear.y = 0
             self.twist.linear.z = 0
@@ -756,7 +757,7 @@ class Detector:
             print("error")
 
         self.gap_vel_pub.publish(self.twist)
-
+        '''
         img = edges
         # image_message = self.bridge.cv2_to_imgmsg(img, encoding="passthrough")
         # self.detection_image_pub.publish(image_message)
@@ -770,6 +771,7 @@ class Detector:
         else:
             image_message = self.bridge.cv2_to_imgmsg(img, encoding="passthrough")
             self.detection_image_pub.publish(image_message)
+        '''
 
     def theta_filter(self, points_list,imagelines):
         points_1 = []
@@ -786,9 +788,12 @@ class Detector:
                 k = np.abs((y1-y2)/(x1-x2))
             else:
                 k = np.Inf
-            case = (np.abs(y1 - self.mag_to_cam[1]) <= 0.32 or np.abs(y2- self.mag_to_cam[1]) <= 0.32)
-            case_2 = np.sqrt((y1-y2)**2 + (x1 - x2)**2) >=0.3
-            if k <= 1 and case and case_2:
+            case_1 = (np.abs(y1 - self.mag_to_cam[1]) <= 0.35 or np.abs(y2- self.mag_to_cam[1]) <= 0.35)
+            case_2 = np.sqrt((y1-y2)**2 + (x1 - x2)**2) >=0.1
+            print("x1",x1,x2)
+            case_3 = (np.min([np.abs(x1),np.abs(x2)]) < 0.2) and ((np.abs(y1 - self.mag_to_cam[1]) <= 0.6 or np.abs(y2- self.mag_to_cam[1]) <= 0.6))
+            case = case_1 or case_3
+            if k <= 0.8 and case and case_2:
                 temp_lines.append(line)
                 points_1.append([line[0],line[1]])
                 points_2.append([line[2],line[3]])
@@ -812,10 +817,8 @@ class Detector:
 
     def lineseg_dists(self,p, a, b):
         """Cartesian distance from point to line segment
-
         Edited to support arguments as series, from:
         https://stackoverflow.com/a/54442561/11208892
-
         Args:
             - p: np.array of single point, shape (2,) or 2D array, shape (x, 2)
             - a: np.array of shape (x, 2)
@@ -847,6 +850,7 @@ class Detector:
             temp_X2,temp_Y2,temp_Z2 = self.img2ground(line[1])
             temp_X2,temp_Y2,temp_Z2 = self.camera_tf2_mag(temp_X2,temp_Y2,temp_Z2)
             points_list2.append((temp_X1,temp_Y1,temp_X2,temp_Y2))
+        print("points_list2",points_list2)
         lines,points_a,points_b,imagelines = self.theta_filter(points_list2,lines)
 
         if len(lines) == 0:
@@ -882,7 +886,7 @@ class Detector:
                 else:
                     theta = np.arctan((Y-Y2)/np.abs(X-X2))
                 if np.sqrt(px**2 + py ** 2) >=3:
-                    # distance value is too large to accept
+                    print(" distance value is too large to accept")
                     px = 0.1
                     py = 0
                     pz = -0.15
