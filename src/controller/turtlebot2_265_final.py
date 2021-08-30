@@ -290,7 +290,7 @@ class Controller:
         # [v, w, R] = self.calculate_velocity([update_R*np.sin(np.pi - update_theta), update_R*(1 + np.cos(np.pi-update_theta))])  # to be changed with proportional control
         new_goal = [goal_x, goal_y]
         # new_goal = [update_R*np.sin(np.pi - update_theta), update_R*(1 + np.cos(np.pi-update_theta))]
-        print("[goal_x, goal_y]",[goal_x, goal_y],"v_cub,w_cub",v,w)
+
         # [v, w] = self.calculate_velocity(final_p)
         if np.abs(v) <= self.v_max/2 and np.abs(w) <= self.w_max/2 and np.abs(v) >=0.001 and np.abs(w) >= 0.001:
             p1 = v/self.v_max * 2
@@ -298,10 +298,9 @@ class Controller:
             ppp = max(np.abs(p1),np.abs(p2))
             v = v/ppp
             w = w/ppp
-
         self.twist.linear.x = v
         self.twist.angular.z = w
-        print("final_p",final_p,"245,v,w",v,w)
+        print("final_p",final_p,"[goal_x, goal_y]",[goal_x, goal_y],"245,v,w",v,w)
         return [self.twist,midway_x_list,midway_y_list,R,new_goal,case]
 
     def cubic_poly_motion_planning(self, currentp, current_vel, finalp, final_vel,total_expected_time):
@@ -790,7 +789,7 @@ class Detector:
         else:
             result = Twist()
             result.angular.z = 0
-            vx = 0.06
+            vx = 0.1
             result.linear.x = vx
             midway_x_list = np.linspace(0,0.5,11)
             midway_y_list = np.linspace(0,0,11)
