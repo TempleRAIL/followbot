@@ -235,7 +235,7 @@
     </link>
 
     <!-- Fred Gazebo simulation details -->
-    <fred_sim/>
+    <xacro:fred_sim/>
 
   </xacro:macro>
 </robot>

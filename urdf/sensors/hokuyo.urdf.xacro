@@ -36,6 +36,6 @@
     </link>
 
     <!-- Set up laser gazebo details -->
-    <turtlebot_sim_2dsensor/>
+    <xacro:turtlebot_sim_2dsensor/>
   </xacro:macro>
 </robot>

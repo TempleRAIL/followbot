@@ -12,7 +12,7 @@
   <xacro:include filename="$(find followbot)/urdf/sensors/fred_monocular_camera.urdf.xacro"/>
   <xacro:include filename="$(find followbot)/urdf/fred/fred_gazebo.urdf.xacro" />
 
-  <fred/>
-  <sensor_kinect  parent="base_link"/>
-  <sensor_monocular_camera  parent="base_link" />
+  <xacro:fred/>
+  <xacro:sensor_kinect  parent="base_link"/>
+  <xacro:sensor_monocular_camera  parent="base_link" />
 </robot>

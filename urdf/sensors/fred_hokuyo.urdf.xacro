@@ -36,6 +36,6 @@
     </link>
 
     <!-- Set up laser gazebo details -->
-    <fred_sim_2dsensor/>
+    <xacro:fred_sim_2dsensor/>
   </xacro:macro>
 </robot>

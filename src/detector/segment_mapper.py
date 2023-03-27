@@ -92,7 +92,7 @@ class SegmentMapper:
     # Interpolate by a fixed distance to limit size of message and regenerate spline
     n_steps = np.ceil(s[-1] / self.step_size)
     if n_steps > 2:
-      s = np.linspace(0, s[-1], n_steps)
+      s = np.linspace(0, s[-1], int(n_steps))
       pts = spl(s)
       spl = CubicSpline(s, pts, axis=1)
 

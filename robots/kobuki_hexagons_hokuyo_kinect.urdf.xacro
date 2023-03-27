@@ -15,8 +15,8 @@
   <xacro:include filename="$(find followbot)/urdf/turtlebot_gazebo.urdf.xacro" />
 
 
-  <kobuki/>
-  <stack_hexagons parent="base_link" />
-  <sensor_hokuyo  parent="base_link" />
-  <sensor_kinect  parent="base_link"/>
+  <xacro:kobuki/>
+  <xacro:stack_hexagons parent="base_link" />
+  <xacro:sensor_hokuyo  parent="base_link" />
+  <xacro:sensor_kinect  parent="base_link"/>
 </robot>

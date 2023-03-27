@@ -45,6 +45,6 @@
     </link>
 
     <!-- Monocular camera sensor for simulation -->
-    <fred_sim_2dsensor_cam/>
+    <xacro:fred_sim_2dsensor_cam/>
   </xacro:macro>
 </robot>

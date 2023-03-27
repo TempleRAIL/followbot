@@ -85,7 +85,7 @@
       <pose frame=''>0.567241 1.71098 0 0 -0 0</pose>
     </model>
     <state world_name='default'>
-      <sim_time>1902 544000000</sim_time>
+      <sim_time>0</sim_time>
       <real_time>381 513425390</real_time>
       <wall_time>1613403985 882995753</wall_time>
       <iterations>366581</iterations>
