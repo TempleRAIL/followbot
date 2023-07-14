@@ -6,7 +6,7 @@ import rospy
 import math
 from sensor_msgs.msg import BatteryState,Image
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point,Pose, PoseStamped
+from geometry_msgs.msg import Twist, Point, Pose, PoseStamped
 from tf.transformations import euler_from_quaternion
 import copy
 import time
@@ -71,6 +71,7 @@ class pathPlanning():
         self.w0 = 0
         self.v_max = 1
         self.w_max = 0.5
+        self.v_patrol = 1
         self.v = copy.deepcopy(self.v0)
         self.w = copy.deepcopy(self.w0)
 
@@ -87,7 +88,7 @@ class pathPlanning():
             'orientation': PDController(1, 0.5),
             'position': PDController(1, 0.5)
         }
-        self.dt = 1 # PD controller parameter
+        self.dt = 0.2 # PD controller parameter
         self.zedOdomSubscriber = rospy.Subscriber('/zed/zed_node/pose', PoseStamped, self.pose_callback)
         self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
         self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
@@ -95,7 +96,7 @@ class pathPlanning():
         self.kick_signal_sub = rospy.Subscriber("/kick_signal", channel_values, self.kick_signal_callback)
         self.straight_line_patrol_sub = rospy.Subscriber('/mag_marker_detect',channel_values,self.patrol_callback,queue_size = 5)
         self.mag_detection_sub = rospy.Subscriber('/mag_track_detect',channel_values,self.mag_detection_callback,queue_size = 5)
-
+        self.vel_pub = rospy.Publisher('/gap_cmd_vel', Twist, queue_size=5)
         if self.usingTurtlebot:
             self.odomSub = rospy.Subscriber('/zed/zed_node/odom', Odometry, self.odom_callback, queue_size=5)
         else:
@@ -157,12 +158,23 @@ class pathPlanning():
             self.currentZedPose = msg
     def patrol_callback(self,msg):
         if self.mgs == 0 and self.driftSign:
+            # straight line patrol mode, PD controller for straight line follow
             yaw, desiredYaw = self.convertPose2Yaw(msg)
             control_orientation = self.controllers['orientation'].calculate(desiredYaw - yaw, self.dt)
             pStart, pRobot = self.convertPose2Translation(msg)
             distance = self.distance_point_to_line(pStart, desiredYaw, pRobot)
             control_position = self.controllers['position'].calculate(distance, self.dt)
-            self.convertError2Velocity(control_orientation, control_position)
+            control_v,control_w = self.convertError2Velocity(control_orientation, control_position)
+            self.vAndwNormalization(control_v,control_w)
+        elif self.mgs == 0 and self.driftSign==0:
+            # accidental gap,  PD controller for path follow
+            control_v = 0.5* self.v_patrol
+            control_w = 0
+            self.vAndwNormalization(control_v, control_w)
+        else:
+            control_v = 0
+            control_w = 0
+            self.vAndwNormalization(control_v, control_w)
 
     def convertPose2Yaw(self, msgInPose):
         (_, _, yaw) = euler_from_quaternion(msgInPose.transform.rotation)
@@ -190,11 +202,16 @@ class pathPlanning():
 
     def convertError2Velocity(self, control_orientation, control_position):
         # orientation is same between the camera and robot body
-
+        control_v = self.v_patrol
+        control_w = control_orientation + control_position
         return control_orientation, control_position
     def vAndwNormalization(self, v, w):
-        self.v = v
+        self.v = v if v > self.v_max else self.v
         self.w = w
+        msg = Twist()
+        msg.linear.x = self.v
+        msg.angular.z = self.w
+        self.vel_pub.publish(msg)
 class Detector:
     def __init__(self):
         self.PPX1 = 665.465
