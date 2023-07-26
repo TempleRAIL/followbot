@@ -8,48 +8,12 @@ from sensor_msgs.msg import BatteryState,Image
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Twist, Point, Pose, PoseStamped
 from tf.transformations import euler_from_quaternion
+from nav_msgs.msg import Odometry
 import copy
 import time
 from roboteq_motor_controller_driver.msg import channel_values
 from nav_msgs.msg import Odometry,Path
-
-class PurePursuit:
-    def __init__(self, path, look_ahead):
-        self.path = path
-        self.look_ahead = look_ahead
-
-    def get_steering(self, robot_position):
-        # Find the point on the path that's look_ahead distance from the robot
-        for i in range(len(self.path) - 1):
-            # Get the current point and the next point on the path
-            current_point = self.path[i]
-            next_point = self.path[i+1]
-
-            # See if the line between current_point and next_point intersects with the look_ahead circle
-            d = next_point - current_point
-            f = current_point - robot_position
-
-            a = np.dot(d, d)
-            b = 2 * np.dot(f, d)
-            c = np.dot(f, f) - self.look_ahead**2
-
-            discriminant = b**2 - 4 * a * c
-            if discriminant < 0:
-                continue
-
-            discriminant = np.sqrt(discriminant)
-            t1 = (-b - discriminant) / (2*a)
-            t2 = (-b + discriminant) / (2*a)
-
-            if 0 <= t1 <= 1:
-                return current_point + d * t1
-            if 0 <= t2 <= 1:
-                return current_point + d * t2
-
-        # If there's no intersection point, return the last point in the path
-        return self.path[-1]
-
-
+from image_geometry import PinholeCameraModel
 class PDController:
     def __init__(self, P, D):
         self.P = 1
@@ -64,8 +28,20 @@ class PDController:
 
 
 class pathPlanning():
-    def __init__(self):
-        self.usingTurtlebot = 1
+    def __init__(self, usingTurtlebot):
+        self.usingTurtlebot = usingTurtlebot
+        if self.usingTurtlebot:
+            self.mgs = 1
+            self.vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=5)
+        else:
+            self.vel_pub = rospy.Publisher('/gap_cmd_vel', Twist, queue_size=5)
+            self.lidar_front_detection_sub = rospy.Subscriber('lidar_front', channel_values, self.lidar_front_callback,
+                                                              queue_size=5)
+            self.lidar_back_detection_sub = rospy.Subscriber('lidar_back', channel_values, self.lidar_back_callback,
+                                                             queue_size=5)
+            self.mag_detection_sub = rospy.Subscriber('/mag_track_detect', channel_values, self.mag_detection_callback,
+                                                      queue_size=5)
+            self.kick_signal_sub = rospy.Subscriber("/kick_signal", channel_values, self.kick_signal_callback)
 
         self.v0 = 0
         self.w0 = 0
@@ -81,6 +57,8 @@ class pathPlanning():
         self.wheel_radius = 0.2
 
         self.driftSign = 0  # 0 is off, 1 is on with flow optical flow
+        self.getDetection = 0
+        self.detectedMagneticTapePose= []
         self.lastMagneticDetection = 0
         self.lastZedPoseWhenLoseMagnetic = Pose()
         self.currentZedPose = Pose()
@@ -89,16 +67,14 @@ class pathPlanning():
             'position': PDController(1, 0.5)
         }
         self.dt = 0.2 # PD controller parameter
-        self.zedOdomSubscriber = rospy.Subscriber('/zed/zed_node/pose', PoseStamped, self.pose_callback)
-        self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
-        self.lidar_front_detection_sub = rospy.Subscriber('lidar_front',channel_values,self.lidar_front_callback,queue_size = 5)
-        self.lidar_back_detection_sub = rospy.Subscriber('lidar_back',channel_values,self.lidar_back_callback,queue_size = 5)
-        self.kick_signal_sub = rospy.Subscriber("/kick_signal", channel_values, self.kick_signal_callback)
-        self.straight_line_patrol_sub = rospy.Subscriber('/mag_marker_detect',channel_values,self.patrol_callback,queue_size = 5)
-        self.mag_detection_sub = rospy.Subscriber('/mag_track_detect',channel_values,self.mag_detection_callback,queue_size = 5)
-        self.vel_pub = rospy.Publisher('/gap_cmd_vel', Twist, queue_size=5)
+        self.zedOdomSubscriber = rospy.Subscriber("/zed/zed_node/odom", Odometry, self.odom_callback)
+
+        # self.straight_line_patrol_sub = rospy.Subscriber('/zed/zed_node/odom', Odometry,self.patrol_callback,queue_size = 5)
+
         if self.usingTurtlebot:
             self.odomSub = rospy.Subscriber('/zed/zed_node/odom', Odometry, self.odom_callback, queue_size=5)
+            self.depthSub = rospy.Subscriber("/zed/zed_node/depth/depth_registered", Image, self.depth_image_callback)
+
         else:
             if self.front_kick_val == 1:
                 assert self.back_kick_val == 0
@@ -107,28 +83,6 @@ class pathPlanning():
                 assert self.front_kick_val == 0
                 self.odom_A_sub = rospy.Subscriber('/zedA/zed_node_A/odom', Odometry, self.odom_callback,queue_size=5)
 
-        # while not rospy.is_shutdown():
-        #     if self.mgs == 1:
-        #         try:
-        #             self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
-        #             self.theta = euler_from_quaternion([self.trans.transform.rotation.x,
-        #                                                 self.trans.transform.rotation.y,
-        #                                                 self.trans.transform.rotation.z,
-        #                                                 self.trans.transform.rotation.w])[2]
-        #             self.last_trans = self.trans
-        #             self.last_theta = self.theta
-        #         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-        #             continue
-        #
-        #     else:
-        #         try:
-        #             self.trans = tfBuffer.lookup_transform('camera_odom_frame', 'camera_pose_frame', rospy.Time())
-        #             self.theta = euler_from_quaternion([self.trans.transform.rotation.x,
-        #                                                 self.trans.transform.rotation.y,
-        #                                                 self.trans.transform.rotation.z,
-        #                                                 self.trans.transform.rotation.w])[2]
-        #         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-        #             continue
     def kick_front_callback(self,msg):
         if msg.value[0] == 1:
             self.front_kick_val = 1
@@ -156,6 +110,7 @@ class pathPlanning():
             self.lastZedPoseWhenLoseMagnetic = msg
             self.lastMagneticDetection = 0
             self.currentZedPose = msg
+        self.patrol_callback(msg)
     def patrol_callback(self,msg):
         if self.mgs == 0 and self.driftSign:
             # straight line patrol mode, PD controller for straight line follow
@@ -167,29 +122,50 @@ class pathPlanning():
             control_v,control_w = self.convertError2Velocity(control_orientation, control_position)
             self.vAndwNormalization(control_v,control_w)
         elif self.mgs == 0 and self.driftSign==0:
-            # accidental gap,  PD controller for path follow
-            control_v = 0.5* self.v_patrol
-            control_w = 0
-            self.vAndwNormalization(control_v, control_w)
-        else:
-            control_v = 0
-            control_w = 0
-            self.vAndwNormalization(control_v, control_w)
-
+            if self.getDetection==0:
+                # accidental gap,  PD controller for path follow
+                control_v = 0.5* self.v_patrol
+                control_w = 0
+                self.vAndwNormalization(control_v, control_w)
+            else:
+                # (_, _, yaw) = self.euler_from_quaternion(msg.pose.pose.orientation)
+                desiredYaw = self.detectedMagneticTapePose[2]
+                control_orientation = self.controllers['orientation'].calculate(desiredYaw, self.dt)
+                pStart, pRobot = self.convertPose2Translation(msg)
+                distance = np.linalg.norm(desiredYaw[0][0])
+                control_position = self.controllers['position'].calculate(distance, self.dt)
+                control_v, control_w = self.convertError2Velocity(control_orientation, control_position)
+                self.vAndwNormalization(control_v, control_w)
     def convertPose2Yaw(self, msgInPose):
-        (_, _, yaw) = euler_from_quaternion(msgInPose.transform.rotation)
-        (_, _, desiredYaw) = euler_from_quaternion(self.lastZedPoseWhenLoseMagnetic.transform.rotation)
+        (_, _, yaw) = self.euler_from_quaternion(msgInPose.pose.pose.orientation)
+        (_, _, desiredYaw) = self.euler_from_quaternion(self.lastZedPoseWhenLoseMagnetic.pose.pose.orientation)
         return yaw, desiredYaw
 
+    def convertCamera2Magnetic(self,cameraDetectionXYZ):
+        return cameraDetectionXYZ - self.mag_to_cam
+    def getDetectionPose(self,pointNear,pointFar):
+        if pointNear:
+            self.getDetection = 1
+            p1 = self.convertCamera2Magnetic(pointNear)
+            p2 = self.convertCamera2Magnetic(pointFar)
+            vector = p2 - p1
+            # Normalize the vector
+            vector_norm = vector / np.linalg.norm(vector)
+            # Calculate angle with respect to the x-axis
+            angle = np.arccos(np.dot(vector_norm, np.array([1, 0, 0])))
+            self.detectedMagneticTapePose = [pointNear,pointFar,angle]
+        else:
+            self.getDetection = 0
+            self.detectedMagneticTapePose = []
     def convertPose2Translation(self, msgInPose):
-        x1 = self.lastZedPoseWhenLoseMagnetic.transform.translation.x
-        y1 = self.lastZedPoseWhenLoseMagnetic.transform.translation.y
-        z1 = self.lastZedPoseWhenLoseMagnetic.transform.translation.z
+        x1 = self.lastZedPoseWhenLoseMagnetic.pose.pose.position.x
+        y1 = self.lastZedPoseWhenLoseMagnetic.pose.pose.position.y
+        z1 = self.lastZedPoseWhenLoseMagnetic.pose.pose.position.z
         P1 = np.array([x1, y1, z1])
 
-        x2 = msgInPose.transform.translation.x
-        y2 = msgInPose.transform.translation.y
-        z2 = msgInPose.transform.translation.z
+        x2 = msgInPose.pose.pose.position.x
+        y2 = msgInPose.pose.pose.position.y
+        z2 = msgInPose.pose.pose.position.z
         P2 = np.array([x2, y2, z2])
         return P1, P2
 
@@ -213,25 +189,44 @@ class pathPlanning():
         msg.angular.z = self.w
         self.vel_pub.publish(msg)
 class Detector:
-    def __init__(self):
-        self.PPX1 = 665.465
-        self.PPY1 = 371.953
-        self.Fx1 = 700.819
-        self.Fy1 = 700.819
+    def __init__(self,usingTurtlebot):
+        self.Fx1 = 701.2269897460938
+        self.Fy1 = 701.2269897460938
+        self.PPX1 = 622.2620239257812
+        self.PPY1 = 367.79400634765625
         self.K1 = np.array([[self.Fx1, 0., self.PPX1],
                             [0., self.Fy1, self.PPY1],
                             [0., 0., 1.]])
         self.Knew1 = self.K1.copy()
         self.Knew1[(0, 1), (0, 1)] = 1 * self.Knew1[(0, 1), (0, 1)]
         self.R = np.eye(3)
-        self.mag_to_cam = [5 * 0.0254, -1 * 0.0254, 0]
 
+        self.focal_length_x = 667.1478881835938
+        self.focal_length_y = 667.1478881835938
+        self.optical_center_x = 610.6473388671875
+        self.optical_center_y = 365.609619140625
+        self.depthK = np.array([[self.optical_center_x, 0., self.optical_center_x],
+                            [0., self.optical_center_y, self.optical_center_y],
+                            [0., 0., 1.]])
+        self.plane_threshold = 0.5
+        self.depth_sub = rospy.Subscriber('/zed/zed_node/depth/depth_registered', Image, self.depth_callback,
+                                        queue_size=5)
+
+        self.controller = pathPlanning(1)
         self.lineWidth = 0.1 # only remove the detection significantly larger than the width of the magnetic tape
-
-        self.img_A_sub = rospy.Subscriber("/zed/zed_node/left_raw/image_raw_color", Image, self.measurements_callback,
-                                     queue_size=5)
-        self.img_B_sub = rospy.Subscriber("/zedB/zed_node_B/left_raw/image_raw_color", Image, self.measurements_callback,
-                                     queue_size=5)
+        if usingTurtlebot:
+            self.mag_to_cam = [0, 0, 0]
+            self.plane_params = np.array([0, 0, 1, -0.23])
+            self.img_sub = rospy.Subscriber('/zed/zed_node/left_raw/image_raw_color', Image, self.measurements_callback,
+                                            queue_size=5)
+        else:
+            # FRED case
+            self.mag_to_cam = [5 * 0.0254, -1 * 0.0254, 0]
+            self.plane_params = np.array([0, 0, 1, -0.23]) # The value is same occasionally with turtlebot
+            self.img_A_sub = rospy.Subscriber("/zed/zed_node/left_raw/image_raw_color", Image, self.measurements_callback,
+                                         queue_size=5)
+            self.img_B_sub = rospy.Subscriber("/zedB/zed_node_B/left_raw/image_raw_color", Image, self.measurements_callback,
+                                         queue_size=5)
         self.linePublisher = rospy.Publisher("/markerPointPub", MarkerArray, queue_size=10)
         self.detectionGoalPublisher = rospy.Publisher("/detectedSegment",Marker, queue_size=10)
     def measurements_callback(self, img1):
@@ -245,17 +240,17 @@ class Detector:
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, 8, cv2.CV_32S)
         min_size = 25  # minimum size of the component (in pixels)
         max_size = 6000  # maximum size of the component (in pixels)
-        y_threshold_min = 100  # Adjust this value to your needs
-        y_threshold_max = 1000  # Adjust this value to your needs
 
         # Create a new image to store the filtered components
         filtered_img = np.zeros_like(labels)
         # Loop through the connected components
+        potentialLabelList = []
         for i in range(1, num_labels):
             # If the size of the connected component is within the desired range
             if min_size <= stats[i, cv2.CC_STAT_AREA] <= max_size and stats[i, cv2.CC_STAT_WIDTH] < stats[i, cv2.CC_STAT_HEIGHT]:
                 # Add this component to the filtered image
                 filtered_img[labels == i] = 255
+                potentialLabelList.append([i])
                 left = stats[i, cv2.CC_STAT_LEFT]
                 top = stats[i, cv2.CC_STAT_TOP]
                 width = stats[i, cv2.CC_STAT_WIDTH]
@@ -263,13 +258,42 @@ class Detector:
                 # The area (in pixels)
                 area = stats[i, cv2.CC_STAT_AREA]
 
-        filtered_img_uint8 = filtered_img.astype(np.uint8)
-        filtered_color = cv2.cvtColor(filtered_img_uint8, cv2.COLOR_GRAY2BGR)
-        filtered_color = cv2.resize(filtered_color, (image.shape[1], image.shape[0]))
-        blended = cv2.addWeighted(image, 0.5, filtered_color, 0.5, 0)
+        ## cv image show
+        # filtered_img_uint8 = filtered_img.astype(np.uint8)
+        # filtered_color = cv2.cvtColor(filtered_img_uint8, cv2.COLOR_GRAY2BGR)
+        # filtered_color = cv2.resize(filtered_color, (image.shape[1], image.shape[0]))
+        # blended = cv2.addWeighted(image, 0.5, filtered_color, 0.5, 0)
+        #
+        # self.showInMovedWindow('video_image2', blended, 600, 800)
+        # cv2.waitKey(3)
 
-        self.showInMovedWindow('video_image2', blended, 600, 800)
-        cv2.waitKey(3)
+    def depth_callback(self, data):
+        depth_image = self.bridge.imgmsg_to_cv2(data)  # convert ROS Image message to OpenCV image
+        imageD = cv2.cvtColor(depth_image, cv2.COLOR_BGR2GRAY)
+        height, width = imageD.shape
+        u = np.arange(width)
+        v = np.arange(height)
+
+        # generate a grid of (u, v) coordinates
+        u, v = np.meshgrid(u, v)
+
+        # convert depth image to 3D point cloud
+        Z = imageD
+        X = (u - self.optical_center_x) * Z / self.focal_length_x
+        Y = (v - self.optical_center_y) * Z / self.focal_length_y
+
+        # create a mask for non-ground points
+        is_ground = np.abs(
+            self.plane_params[0] * X + self.plane_params[1] * Y + self.plane_params[2] * Z + self.plane_params[
+                3]) < self.plane_threshold
+        non_ground_mask = np.logical_not(is_ground)
+
+        # apply the mask to the depth image (set non-ground pixels to a specific value, e.g., maximum depth value)
+        depth_image[non_ground_mask] = data.max_range
+
+        # display the resulting image (for debugging)
+        cv2.imshow('Filtered Depth Image', depth_image)
+        cv2.waitKey(1)
 
     def convertPattern2Point(self,i, labels_i, stats, centroids):
         # label_i is the binary image
@@ -370,5 +394,5 @@ def measurements_callback(img1):
 
 if __name__ == '__main__':
     rospy.init_node('line_detector')
-    detector = Detector()
+    detector = Detector(1)
     rospy.spin()
